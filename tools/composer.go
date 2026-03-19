@@ -92,7 +92,6 @@ func addServices(appConfig *AppConfig, clientCount int) {
 		Entrypoint:    "python3 /main.py",
 		Environment: []string{
 			"PYTHONUNBUFFERED=1",
-			"LOGGING_LEVEL=DEBUG",
 		},
 		Networks: []string{"testing_net"},
 		// TODO: por ahora solo montamos el file, podria servir montar el dir de server
@@ -107,7 +106,6 @@ func addServices(appConfig *AppConfig, clientCount int) {
 			Entrypoint:    "/client",
 			Environment: []string{
 				"CLI_ID=" + fmt.Sprintf("%d", i),
-				"CLI_LOG_LEVEL=DEBUG",
 			},
 			DependsOn: []string{"server"},
 			Networks:  []string{"testing_net"},
