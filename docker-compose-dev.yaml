@@ -11,6 +11,8 @@ services:
             - server
         networks:
             - testing_net
+        volumes:
+            - ./client/config.yaml:/config.yaml
     client2:
         container_name: client2
         image: client:latest
@@ -22,6 +24,8 @@ services:
             - server
         networks:
             - testing_net
+        volumes:
+            - ./client/config.yaml:/config.yaml
     client3:
         container_name: client3
         image: client:latest
@@ -33,6 +37,8 @@ services:
             - server
         networks:
             - testing_net
+        volumes:
+            - ./client/config.yaml:/config.yaml
     client4:
         container_name: client4
         image: client:latest
@@ -44,6 +50,8 @@ services:
             - server
         networks:
             - testing_net
+        volumes:
+            - ./client/config.yaml:/config.yaml
     client5:
         container_name: client5
         image: client:latest
@@ -55,6 +63,8 @@ services:
             - server
         networks:
             - testing_net
+        volumes:
+            - ./client/config.yaml:/config.yaml
     server:
         container_name: server
         image: server:latest
@@ -62,9 +72,10 @@ services:
         environment:
             - PYTHONUNBUFFERED=1
             - LOGGING_LEVEL=DEBUG
-        depends_on: []
         networks:
             - testing_net
+        volumes:
+            - ./server/config.ini:/config.ini
 networks:
     testing_net:
         ipam:

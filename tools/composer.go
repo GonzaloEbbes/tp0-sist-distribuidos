@@ -20,8 +20,9 @@ type ServiceConfig struct {
 	Image         string   `yaml:"image"`
 	Entrypoint    string   `yaml:"entrypoint"`
 	Environment   []string `yaml:"environment"`
-	DependsOn     []string `yaml:"depends_on"`
+	DependsOn     []string `yaml:"depends_on,omitempty"`
 	Networks      []string `yaml:"networks"`
+	Volumes       []string `yaml:"volumes,omitempty"`
 }
 
 type NetworkConfig struct {
@@ -37,6 +38,7 @@ type SubnetConfig struct {
 	Subnet string `yaml:"subnet"`
 }
 
+// TODO: Eliminar los prints y handlear errores
 func main() {
 	args := os.Args
 	if len(args) < 3 {
@@ -71,7 +73,7 @@ func main() {
 		},
 	}
 
-	addClientServices(&AppConfig, clientCount)
+	addServices(&AppConfig, clientCount)
 
 	rawFileContent, err := generateRawFileContent(AppConfig)
 	if err != nil {
@@ -82,7 +84,7 @@ func main() {
 	err = writeFile(outputFile, rawFileContent)
 }
 
-func addClientServices(appConfig *AppConfig, clientCount int) {
+func addServices(appConfig *AppConfig, clientCount int) {
 	services := make(map[string]ServiceConfig, clientCount+1) // +1 para el server
 	services["server"] = ServiceConfig{
 		ContainerName: "server",
@@ -93,6 +95,9 @@ func addClientServices(appConfig *AppConfig, clientCount int) {
 			"LOGGING_LEVEL=DEBUG",
 		},
 		Networks: []string{"testing_net"},
+		// TODO: por ahora solo montamos el file, podria servir montar el dir de server
+		Volumes:   []string{"./server/config.ini:/config.ini"},
+		DependsOn: nil,
 	}
 
 	for i := 1; i <= clientCount; i++ {
@@ -106,6 +111,7 @@ func addClientServices(appConfig *AppConfig, clientCount int) {
 			},
 			DependsOn: []string{"server"},
 			Networks:  []string{"testing_net"},
+			Volumes:   []string{"./client/config.yaml:/config.yaml"},
 		}
 		services[fmt.Sprintf("client%d", i)] = clientService
 	}
