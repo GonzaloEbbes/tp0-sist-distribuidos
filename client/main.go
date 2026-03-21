@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/op/go-logging"
@@ -111,5 +113,25 @@ func main() {
 	}
 
 	client := common.NewClient(clientConfig)
-	client.StartClientLoop()
+	stopClientCh := make(chan bool, 1)
+	clientDoneCh := make(chan bool, 1)
+	setTerminateHandler(client, stopClientCh, clientDoneCh)
+	client.StartClientLoop(stopClientCh, clientDoneCh)
+}
+
+func setTerminateHandler(client *common.Client, stopClientCh chan bool, clientDoneCh chan bool) {
+	// Create a channel to listen for termination signals
+	terminate := make(chan os.Signal, 1)
+
+	// Listen for SIGTERM signals
+	signal.Notify(terminate, syscall.SIGTERM)
+
+	// Start a goroutine to handle termination signals
+	go func() {
+		<-terminate
+		log.Info("Termination signal received. Stopping client...")
+		stopClientCh <- true
+		<-clientDoneCh
+		client.StopClientLoop()
+	}()
 }
