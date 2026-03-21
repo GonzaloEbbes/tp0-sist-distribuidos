@@ -24,6 +24,14 @@ class Server:
             client_sock = self.__accept_new_connection()
             self.__handle_client_connection(client_sock)
 
+    def __send_message(self, client_sock, msg_bytes):
+        total_sent = 0
+        while total_sent < len(msg_bytes):
+            sent = client_sock.send(msg_bytes[total_sent:])
+            if sent == 0:
+                raise OSError("Socket closed before sending full message")
+            total_sent += sent
+
     def __handle_client_connection(self, client_sock):
         """
         Read message from a specific client socket and closes the socket
@@ -32,14 +40,17 @@ class Server:
         client socket will also be closed
         """
         try:
-            # TODO: Modify the receive to avoid short-reads
-            msg = client_sock.recv(1024).rstrip().decode('utf-8')
+            # TODO: Avoid short-read by receiving until a full message boundary is detected.
+            msg_bytes = client_sock.recv(1024)
+            if len(msg_bytes) == 0:
+                raise OSError("Socket closed before receiving message")
+
+            msg = msg_bytes.rstrip().decode('utf-8')
             addr = client_sock.getpeername()
             logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
-            # TODO: Modify the send to avoid short-writes
-            client_sock.send("{}\n".format(msg).encode('utf-8'))
+            self.__send_message(client_sock, "{}\n".format(msg).encode('utf-8'))
         except OSError as e:
-            logging.error("action: receive_message | result: fail | error: {e}")
+            logging.error(f"action: receive_message | result: fail | error: {e}")
         finally:
             client_sock.close()
 
