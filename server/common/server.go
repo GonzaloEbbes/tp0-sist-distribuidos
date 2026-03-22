@@ -19,6 +19,7 @@ type Server struct {
 }
 
 func NewServer(port int, listenBacklog int) (*Server, error) {
+	// Initialize server socket
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, err
@@ -49,6 +50,11 @@ func (s *Server) Stop() {
 	}
 }
 
+// Dummy Server loop
+//
+// Server that accept a new connections and establishes a
+// communication with a client. After client with communucation
+// finishes, servers starts to accept new connections again
 func (s *Server) Run() {
 	for !s.isShutdownRequested() {
 		clientConn := s.acceptNewConnection()
@@ -80,6 +86,10 @@ func (s *Server) sendMessage(clientConn net.Conn, msgBytes []byte) error {
 	return nil
 }
 
+// Read message from a specific client socket and closes the socket
+//
+// If a problem arises in the communication with the client, the
+// client socket will also be closed
 func (s *Server) handleClientConnection(clientConn net.Conn) {
 	s.mu.Lock()
 	s.clientConn = clientConn
@@ -98,6 +108,7 @@ func (s *Server) handleClientConnection(clientConn net.Conn) {
 	}()
 
 	msgBytes := make([]byte, 1024)
+	// TODO: Avoid short-read by receiving until a full message boundary is detected.
 	n, err := clientConn.Read(msgBytes)
 	if err != nil {
 		if !s.isShutdownRequested() {
@@ -123,7 +134,12 @@ func (s *Server) handleClientConnection(clientConn net.Conn) {
 	}
 }
 
+// Accept new connections
+//
+// Function blocks until a connection to a client is made.
+// Then connection created is printed and returned
 func (s *Server) acceptNewConnection() net.Conn {
+	// Connection arrived
 	log.Info("action: accept_connections | result: in_progress")
 
 	s.mu.Lock()

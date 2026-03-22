@@ -10,6 +10,7 @@ import (
 const StorageFilepath = "./bets.csv"
 const LotteryWinnerNumber = 7574
 
+// A lottery bet registry.
 type Bet struct {
 	Agency    int
 	FirstName string
@@ -19,6 +20,9 @@ type Bet struct {
 	Number    int
 }
 
+// agency must be passed with integer format.
+// birthdate must be passed with format: 'YYYY-MM-DD'.
+// number must be passed with integer format.
 func NewBet(agency string, firstName string, lastName string, document string, birthdate string, number string) (Bet, error) {
 	agencyInt, err := strconv.Atoi(agency)
 	if err != nil {
@@ -45,10 +49,13 @@ func NewBet(agency string, firstName string, lastName string, document string, b
 	}, nil
 }
 
+// Checks whether a bet won the prize or not.
 func HasWon(bet Bet) bool {
 	return bet.Number == LotteryWinnerNumber
 }
 
+// Persist the information of each bet in the StorageFilepath file.
+// Not thread-safe/process-safe.
 func StoreBets(bets []Bet) error {
 	file, err := os.OpenFile(StorageFilepath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -73,6 +80,8 @@ func StoreBets(bets []Bet) error {
 	return writer.Error()
 }
 
+// Load the information of all the bets in the StorageFilepath file.
+// Not thread-safe/process-safe.
 func LoadBets() ([]Bet, error) {
 	file, err := os.Open(StorageFilepath)
 	if err != nil {
