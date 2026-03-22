@@ -10,6 +10,9 @@ import (
 	"gopkg.in/ini.v1"
 
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/server/common"
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/server/internal/infrastructure/protocol"
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/server/internal/infrastructure/repository"
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/server/internal/usecase"
 )
 
 var log = logging.MustGetLogger("log")
@@ -20,17 +23,8 @@ type configParams struct {
 	loggingLevel  string
 }
 
-// Parse environment variables or config file to find program config params
-//
-// This function looks for program configuration parameters in the
-// environment first and then in a config file.
-// If a required key is missing or a parameter cannot be parsed,
-// an error is returned.
-// If parsing succeeds, the function returns the parsed config parameters.
 func initializeConfig() (configParams, error) {
 	cfg := ini.Empty()
-
-	// If config.ini does not exists original config object is not modified
 	_ = cfg.Append("./config.ini")
 
 	defaultSection := cfg.Section("DEFAULT")
@@ -67,10 +61,6 @@ func initializeConfig() (configParams, error) {
 	}, nil
 }
 
-// Logging initialization
-//
-// Current timestamp is added to be able to identify in docker
-// compose logs the date when the log has arrived
 func initializeLog(loggingLevel string) error {
 	baseBackend := logging.NewLogBackend(os.Stdout, "", 0)
 	format := logging.MustStringFormatter(
@@ -101,16 +91,20 @@ func main() {
 		return
 	}
 
-	// Log config parameters at the beginning of the program to verify the configuration
-	// of the component
 	log.Debugf("action: config | result: success | port: %d | listen_backlog: %d | logging_level: %s",
 		config.port,
 		config.listenBacklog,
 		config.loggingLevel,
 	)
 
-	// Initialize server and start server loop
-	server, err := common.NewServer(config.port, config.listenBacklog)
+	registerBet := usecase.NewRegisterBet(repository.NewBetRepository())
+	server, err := common.NewServer(
+		config.port,
+		config.listenBacklog,
+		protocol.NewBetMessageDecoder(),
+		protocol.NewResponseEncoder(),
+		registerBet,
+	)
 	if err != nil {
 		log.Criticalf("%s", err)
 		return

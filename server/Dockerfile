@@ -6,7 +6,7 @@ COPY go.mod go.sum ./
 COPY vendor ./vendor
 COPY server ./server
 
-RUN GOOS=linux go test ./server/common
+RUN GOOS=linux go test ./server/...
 RUN GOOS=linux go build -mod=vendor -o /server github.com/7574-sistemas-distribuidos/docker-compose-init/server
 
 FROM busybox

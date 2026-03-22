@@ -3,11 +3,17 @@ package common
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 
 	"github.com/op/go-logging"
+
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/server/internal/domain"
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/server/internal/ports"
 )
+
+const maxMessageSize = 4096
 
 var log = logging.MustGetLogger("log")
 
@@ -15,11 +21,13 @@ type Server struct {
 	shutdownRequested bool
 	clientConn        net.Conn
 	serverListener    net.Listener
+	decoder           ports.BetMessageDecoder
+	encoder           ports.ResponseEncoder
+	registerBet       ports.BetRegistrar
 	mu                sync.Mutex
 }
 
-func NewServer(port int, listenBacklog int) (*Server, error) {
-	// Initialize server socket
+func NewServer(port int, listenBacklog int, decoder ports.BetMessageDecoder, encoder ports.ResponseEncoder, registerBet ports.BetRegistrar) (*Server, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, err
@@ -27,6 +35,9 @@ func NewServer(port int, listenBacklog int) (*Server, error) {
 
 	return &Server{
 		serverListener: listener,
+		decoder:        decoder,
+		encoder:        encoder,
+		registerBet:    registerBet,
 	}, nil
 }
 
@@ -50,11 +61,6 @@ func (s *Server) Stop() {
 	}
 }
 
-// Dummy Server loop
-//
-// Server that accept a new connections and establishes a
-// communication with a client. After client with communucation
-// finishes, servers starts to accept new connections again
 func (s *Server) Run() {
 	for !s.isShutdownRequested() {
 		clientConn := s.acceptNewConnection()
@@ -71,25 +77,6 @@ func (s *Server) isShutdownRequested() bool {
 	return s.shutdownRequested
 }
 
-func (s *Server) sendMessage(clientConn net.Conn, msgBytes []byte) error {
-	totalSent := 0
-	for totalSent < len(msgBytes) {
-		sent, err := clientConn.Write(msgBytes[totalSent:])
-		if err != nil {
-			return err
-		}
-		if sent == 0 {
-			return fmt.Errorf("socket closed before sending full message")
-		}
-		totalSent += sent
-	}
-	return nil
-}
-
-// Read message from a specific client socket and closes the socket
-//
-// If a problem arises in the communication with the client, the
-// client socket will also be closed
 func (s *Server) handleClientConnection(clientConn net.Conn) {
 	s.mu.Lock()
 	s.clientConn = clientConn
@@ -107,39 +94,46 @@ func (s *Server) handleClientConnection(clientConn net.Conn) {
 		}
 	}()
 
-	msgBytes := make([]byte, 1024)
-	// TODO: Avoid short-read by receiving until a full message boundary is detected.
-	n, err := clientConn.Read(msgBytes)
+	requestBytes, err := readUntilDelimiter(clientConn, '\n', maxMessageSize)
 	if err != nil {
 		if !s.isShutdownRequested() {
 			log.Errorf("action: receive_message | result: fail | error: %v", err)
-		}
-		return
-	}
-	if n == 0 {
-		if !s.isShutdownRequested() {
-			log.Errorf("action: receive_message | result: fail | error: %v", fmt.Errorf("socket closed before receiving message"))
+			errorCode := "malformed_message"
+			if err.Error() == "message exceeds maximum size" {
+				errorCode = "message_too_large"
+			}
+			s.respondWith(clientConn, domain.NewErrorResponse(errorCode, err.Error()))
 		}
 		return
 	}
 
-	msg := string(bytes.TrimRight(msgBytes[:n], " \t\r\n\v\f"))
 	addr := clientConn.RemoteAddr().(*net.TCPAddr)
-	log.Infof("action: receive_message | result: success | ip: %s | msg: %s", addr.IP.String(), msg)
+	log.Infof("action: receive_message | result: success | ip: %s | msg: %s", addr.IP.String(), string(bytes.TrimSpace(requestBytes)))
 
-	if err := s.sendMessage(clientConn, []byte(msg+"\n")); err != nil {
+	request, decodeErr := s.decoder.DecodeRequest(requestBytes)
+	if decodeErr != nil {
+		s.respondWith(clientConn, *decodeErr)
+		return
+	}
+
+	s.respondWith(clientConn, s.registerBet.Register(request))
+}
+
+func (s *Server) respondWith(clientConn net.Conn, response domain.Response) {
+	responseBytes, err := s.encoder.Encode(response)
+	if err != nil {
 		if !s.isShutdownRequested() {
-			log.Errorf("action: receive_message | result: fail | error: %v", err)
+			log.Errorf("action: send_message | result: fail | error: %v", err)
 		}
+		return
+	}
+
+	if err := writeAll(clientConn, responseBytes); err != nil && !s.isShutdownRequested() {
+		log.Errorf("action: send_message | result: fail | error: %v", err)
 	}
 }
 
-// Accept new connections
-//
-// Function blocks until a connection to a client is made.
-// Then connection created is printed and returned
 func (s *Server) acceptNewConnection() net.Conn {
-	// Connection arrived
 	log.Info("action: accept_connections | result: in_progress")
 
 	s.mu.Lock()
@@ -160,4 +154,48 @@ func (s *Server) acceptNewConnection() net.Conn {
 	addr := clientConn.RemoteAddr().(*net.TCPAddr)
 	log.Infof("action: accept_connections | result: success | ip: %s", addr.IP.String())
 	return clientConn
+}
+
+func writeAll(conn net.Conn, message []byte) error {
+	totalWritten := 0
+	for totalWritten < len(message) {
+		written, err := conn.Write(message[totalWritten:])
+		if err != nil {
+			return err
+		}
+		if written == 0 {
+			return fmt.Errorf("socket closed before sending full message")
+		}
+		totalWritten += written
+	}
+
+	return nil
+}
+
+func readUntilDelimiter(conn net.Conn, delimiter byte, maxSize int) ([]byte, error) {
+	buffer := make([]byte, 0, 256)
+	chunk := make([]byte, 256)
+
+	for {
+		read, err := conn.Read(chunk)
+		if err != nil {
+			if err == io.EOF {
+				return nil, fmt.Errorf("socket closed before receiving full message")
+			}
+			return nil, err
+		}
+		if read == 0 {
+			return nil, fmt.Errorf("socket closed before receiving full message")
+		}
+
+		buffer = append(buffer, chunk[:read]...)
+		if len(buffer) > maxSize {
+			return nil, fmt.Errorf("message exceeds maximum size")
+		}
+
+		if bytes.IndexByte(buffer, delimiter) >= 0 {
+			messageEnd := bytes.IndexByte(buffer, delimiter) + 1
+			return buffer[:messageEnd], nil
+		}
+	}
 }

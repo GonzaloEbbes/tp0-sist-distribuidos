@@ -1,67 +1,67 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/op/go-logging"
-	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 
-	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/common"
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/internal/client"
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/internal/domain"
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/internal/protocol"
 )
 
 var log = logging.MustGetLogger("log")
 
-// InitConfig Function that uses viper library to parse configuration parameters.
-// Viper is configured to read variables from both environment variables and the
-// config file ./config.yaml. Environment variables takes precedence over parameters
-// defined in the configuration file. If some of the variables cannot be parsed,
-// an error is returned
-func InitConfig() (*viper.Viper, error) {
-	v := viper.New()
+type clientConfig struct {
+	ID            string
+	ServerAddress string
+	LogLevel      string
+	Bet           domain.BetRequest
+}
 
-	// Configure viper to read env variables with the CLI_ prefix
+func initConfig() (*viper.Viper, error) {
+	v := viper.New()
 	v.AutomaticEnv()
 	v.SetEnvPrefix("cli")
-	// Use a replacer to replace env variables underscores with points. This let us
-	// use nested configurations in the config file and at the same time define
-	// env variables for the nested configurations
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-
-	// Add env variables supported
 	v.BindEnv("id")
-	v.BindEnv("server", "address")
-	v.BindEnv("loop", "period")
-	v.BindEnv("loop", "amount")
-	v.BindEnv("log", "level")
+	v.BindEnv("server.address")
+	v.BindEnv("log.level")
 
-	// Try to read configuration from config file. If config file
-	// does not exists then ReadInConfig will fail but configuration
-	// can be loaded from the environment variables so we shouldn't
-	// return an error in that case
 	v.SetConfigFile("./config.yaml")
 	if err := v.ReadInConfig(); err != nil {
-		fmt.Printf("Configuration could not be read from config file. Using env variables instead")
-	}
-
-	// Parse time.Duration variables and return an error if those variables cannot be parsed
-
-	if _, err := time.ParseDuration(v.GetString("loop.period")); err != nil {
-		return nil, errors.Wrapf(err, "Could not parse CLI_LOOP_PERIOD env var as time.Duration.")
+		log.Warning("Configuration could not be read from config file. Using env variables instead")
 	}
 
 	return v, nil
 }
 
-// InitLogger Receives the log level to be set in go-logging as a string. This method
-// parses the string and set the level to the logger. If the level string is not
-// valid an error is returned
-func InitLogger(logLevel string) error {
+func loadClientConfig() (clientConfig, error) {
+	v, err := initConfig()
+	if err != nil {
+		return clientConfig{}, err
+	}
+
+	return clientConfig{
+		ID:            v.GetString("id"),
+		ServerAddress: v.GetString("server.address"),
+		LogLevel:      v.GetString("log.level"),
+		Bet: domain.BetRequest{
+			Agency:    v.GetString("id"),
+			FirstName: os.Getenv("NOMBRE"),
+			LastName:  os.Getenv("APELLIDO"),
+			Document:  os.Getenv("DOCUMENTO"),
+			Birthdate: os.Getenv("NACIMIENTO"),
+			Number:    os.Getenv("NUMERO"),
+		},
+	}, nil
+}
+
+func initLogger(logLevel string) error {
 	baseBackend := logging.NewLogBackend(os.Stdout, "", 0)
 	format := logging.MustStringFormatter(
 		`%{time:2006-01-02 15:04:05} %{level:.5s}     %{message}`,
@@ -75,63 +75,78 @@ func InitLogger(logLevel string) error {
 	}
 	backendLeveled.SetLevel(logLevelCode, "")
 
-	// Set the backends to be used.
 	logging.SetBackend(backendLeveled)
 	return nil
 }
 
-// PrintConfig Print all the configuration parameters of the program.
-// For debugging purposes only
-func PrintConfig(v *viper.Viper) {
-	log.Infof("action: config | result: success | client_id: %s | server_address: %s | loop_amount: %v | loop_period: %v | log_level: %s",
-		v.GetString("id"),
-		v.GetString("server.address"),
-		v.GetInt("loop.amount"),
-		v.GetDuration("loop.period"),
-		v.GetString("log.level"),
+func printConfig(config clientConfig) {
+	log.Infof(
+		"action: config | result: success | client_id: %s | server_address: %s | log_level: %s",
+		config.ID,
+		config.ServerAddress,
+		config.LogLevel,
 	)
 }
 
 func main() {
-	v, err := InitConfig()
+	config, err := loadClientConfig()
 	if err != nil {
 		log.Criticalf("%s", err)
+		return
 	}
 
-	if err := InitLogger(v.GetString("log.level")); err != nil {
+	if err := initLogger(config.LogLevel); err != nil {
 		log.Criticalf("%s", err)
+		return
 	}
 
-	// Print program config with debugging purposes
-	PrintConfig(v)
+	printConfig(config)
 
-	clientConfig := common.ClientConfig{
-		ServerAddress: v.GetString("server.address"),
-		ID:            v.GetString("id"),
-		LoopAmount:    v.GetInt("loop.amount"),
-		LoopPeriod:    v.GetDuration("loop.period"),
+	betClient := client.New(
+		config.ServerAddress,
+		config.ID,
+		protocol.NewBetMessageEncoder(),
+		protocol.NewServerResponseDecoder(),
+	)
+	setTerminateHandler(betClient)
+
+	response, err := betClient.SendBet(config.Bet)
+	if err != nil {
+		log.Errorf(
+			"action: apuesta_enviada | result: fail | dni: %s | numero: %s | error: %v",
+			config.Bet.Document,
+			config.Bet.Number,
+			err,
+		)
+		return
 	}
 
-	client := common.NewClient(clientConfig)
-	stopClientCh := make(chan bool, 1)
-	clientDoneCh := make(chan bool, 1)
-	setTerminateHandler(client, stopClientCh, clientDoneCh)
-	client.StartClientLoop(stopClientCh, clientDoneCh)
+	if !response.IsSuccess() {
+		log.Errorf(
+			"action: apuesta_enviada | result: fail | dni: %s | numero: %s | error_code: %s | error_message: %s",
+			config.Bet.Document,
+			config.Bet.Number,
+			response.Code,
+			response.Message,
+		)
+		return
+	}
+
+	log.Infof(
+		"action: apuesta_enviada | result: success | dni: %s | numero: %s",
+		config.Bet.Document,
+		config.Bet.Number,
+	)
 }
 
-func setTerminateHandler(client *common.Client, stopClientCh chan bool, clientDoneCh chan bool) {
-	// Create a channel to listen for termination signals
+func setTerminateHandler(client *client.Client) {
 	terminate := make(chan os.Signal, 1)
-
-	// Listen for SIGTERM signals
 	signal.Notify(terminate, syscall.SIGTERM)
 
-	// Start a goroutine to handle termination signals
 	go func() {
 		<-terminate
 		log.Info("Termination signal received. Stopping client...")
-		stopClientCh <- true
-		<-clientDoneCh
-		client.StopClientLoop()
+		client.Close()
+		os.Exit(0)
 	}()
 }
