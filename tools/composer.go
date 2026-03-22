@@ -89,11 +89,9 @@ func addServices(appConfig *AppConfig, clientCount int) {
 	services["server"] = ServiceConfig{
 		ContainerName: "server",
 		Image:         "server:latest",
-		Entrypoint:    "python3 /main.py",
-		Environment: []string{
-			"PYTHONUNBUFFERED=1",
-		},
-		Networks: []string{"testing_net"},
+		Entrypoint:    "/server",
+		Environment:   []string{},
+		Networks:      []string{"testing_net"},
 		// TODO: por ahora solo montamos el file, podria servir montar el dir de server
 		Volumes:   []string{"./server/config.ini:/config.ini"},
 		DependsOn: nil,

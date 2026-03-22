@@ -13,6 +13,7 @@ deps:
 
 build: deps
 	GOOS=linux go build -o bin/client github.com/7574-sistemas-distribuidos/docker-compose-init/client
+	GOOS=linux go build -o bin/server github.com/7574-sistemas-distribuidos/docker-compose-init/server
 .PHONY: build
 
 docker-image:
