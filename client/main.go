@@ -66,7 +66,10 @@ func resolveDatasetPath(path string, clientID string) string {
 	if path == "" {
 		return fmt.Sprintf("./agency-%s.csv", clientID)
 	}
-	return fmt.Sprintf(path, clientID)
+	if strings.Contains(path, "%s") {
+		return fmt.Sprintf(path, clientID)
+	}
+	return path
 }
 
 func loadBetsFromCSV(csvPath string, agencyID string) (domain.BetRequest, error) {
