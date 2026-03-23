@@ -54,14 +54,16 @@ var defaultBetEnvConfig = BetEnvConfig{
 	Number:    "7574",
 }
 
-// TODO: Eliminar los prints y handlear errores
 func main() {
-	args := os.Args
+	if err := run(os.Args); err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run(args []string) error {
 	if len(args) < 3 {
-		//TODO:
-		// faltan parámetros
-		fmt.Println("Usage: composer <output_file> <client_count> [nombre] [apellido] [documento] [nacimiento] [numero]")
-		return
+		return fmt.Errorf("usage: composer <output_file> <client_count> [nombre] [apellido] [documento] [nacimiento] [numero]")
 	}
 
 	outputFile := args[1]
@@ -70,9 +72,7 @@ func main() {
 
 	clientCount, err := strconv.Atoi(clientCountStr)
 	if err != nil {
-		// TODO: manejar error de conversión
-		fmt.Printf("Invalid client count: %s\n", clientCountStr)
-		return
+		return fmt.Errorf("invalid client count %q: %w", clientCountStr, err)
 	}
 	AppConfig := AppConfig{
 		Name: "tp0",
@@ -94,11 +94,14 @@ func main() {
 
 	rawFileContent, err := generateRawFileContent(AppConfig)
 	if err != nil {
-		// TODO: manejar error
-		fmt.Printf("Error generating file content: %v\n", err)
-		return
+		return fmt.Errorf("generate file content: %w", err)
 	}
-	err = writeFile(outputFile, rawFileContent)
+
+	if err := writeFile(outputFile, rawFileContent); err != nil {
+		return fmt.Errorf("write compose file %q: %w", outputFile, err)
+	}
+
+	return nil
 }
 
 func addServices(appConfig *AppConfig, clientCount int, betEnvConfig BetEnvConfig) {
@@ -109,7 +112,6 @@ func addServices(appConfig *AppConfig, clientCount int, betEnvConfig BetEnvConfi
 		Entrypoint:    "/server",
 		Environment:   []string{},
 		Networks:      []string{"testing_net"},
-		// TODO: por ahora solo montamos el file, podria servir montar el dir de server
 		Volumes:   []string{"./server/config.ini:/config.ini"},
 		DependsOn: nil,
 	}
@@ -168,17 +170,22 @@ func generateRawFileContent(appConfig AppConfig) ([]byte, error) {
 }
 
 func writeFile(filename string, content []byte) error {
-	var perm os.FileMode = 0644 // TODO: explicar
+	const perm os.FileMode = 0644
 	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
 		return err
 	}
+
 	bytes, err := f.Write(content)
 	if err != nil {
+		_ = f.Close()
 		return err
 	}
 	if bytes != len(content) {
-		// TODO: delete file if write was incomplete, then return error
+		_ = f.Close()
+		if removeErr := os.Remove(filename); removeErr != nil {
+			return fmt.Errorf("incomplete write: %w (cleanup failed: %v)", errors.New("incomplete write"), removeErr)
+		}
 		return errors.New("incomplete write")
 	}
 	if err = f.Close(); err != nil {
