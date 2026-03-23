@@ -113,7 +113,7 @@ func addServices(appConfig *AppConfig, clientCount int) {
 			Networks:  []string{"testing_net"},
 			Volumes: []string{
 				"./client/config.yaml:/config.yaml",
-				fmt.Sprintf("./data/dataset/agency-%d.csv:%s", i, datasetPath),
+				fmt.Sprintf("./.data/dataset/agency-%d.csv:%s", i, datasetPath),
 			},
 		}
 		services[fmt.Sprintf("client%d", i)] = clientService
