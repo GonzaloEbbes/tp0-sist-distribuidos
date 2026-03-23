@@ -108,14 +108,18 @@ func (s *Server) handleClientConnection(clientConn net.Conn) {
 		return
 	}
 
-	addr := clientConn.RemoteAddr().(*net.TCPAddr)
-	log.Infof("action: receive_message | result: success | ip: %s | msg: %s", addr.IP.String(), strings.ReplaceAll(string(bytes.TrimSpace(requestBytes)), "|", "/"))
-
 	request, decodeErr := s.decoder.DecodeRequest(requestBytes)
 	if decodeErr != nil {
 		s.respondWith(clientConn, *decodeErr)
 		return
 	}
+
+	addr := clientConn.RemoteAddr().(*net.TCPAddr)
+	log.Infof(
+		"action: receive_message | result: success | ip: %s | %s",
+		addr.IP.String(),
+		formatRequestFieldsForLog(request.Fields),
+	)
 
 	s.respondWith(clientConn, s.registerBet.Register(request))
 }
@@ -199,4 +203,29 @@ func readUntilDelimiter(conn net.Conn, delimiter byte, maxSize int) ([]byte, err
 			return buffer[:messageEnd], nil
 		}
 	}
+}
+
+func formatRequestFieldsForLog(fields map[string]string) string {
+	orderedFields := []struct {
+		logKey   string
+		fieldKey string
+	}{
+		{logKey: "agency", fieldKey: "agency"},
+		{logKey: "nombre", fieldKey: "nombre"},
+		{logKey: "apellido", fieldKey: "apellido"},
+		{logKey: "dni", fieldKey: "documento"},
+		{logKey: "nacimiento", fieldKey: "nacimiento"},
+		{logKey: "numero", fieldKey: "numero"},
+	}
+
+	parts := make([]string, 0, len(orderedFields))
+	for _, field := range orderedFields {
+		value, ok := fields[field.fieldKey]
+		if !ok {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s: %s", field.logKey, value))
+	}
+
+	return strings.Join(parts, " | ")
 }
