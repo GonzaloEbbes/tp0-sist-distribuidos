@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/csv"
+	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -20,6 +23,8 @@ type clientConfig struct {
 	ID            string
 	ServerAddress string
 	LogLevel      string
+	DatasetPath   string
+	MaxBatchSize  int
 	Bet           domain.BetRequest
 }
 
@@ -31,6 +36,8 @@ func initConfig() (*viper.Viper, error) {
 	v.BindEnv("id")
 	v.BindEnv("server.address")
 	v.BindEnv("log.level")
+	v.BindEnv("dataset.filepath")
+	v.BindEnv("batch.maxAmount")
 
 	v.SetConfigFile("./config.yaml")
 	if err := v.ReadInConfig(); err != nil {
@@ -50,15 +57,47 @@ func loadClientConfig() (clientConfig, error) {
 		ID:            v.GetString("id"),
 		ServerAddress: v.GetString("server.address"),
 		LogLevel:      v.GetString("log.level"),
-		Bet: domain.BetRequest{
-			Agency:    v.GetString("id"),
-			FirstName: os.Getenv("NOMBRE"),
-			LastName:  os.Getenv("APELLIDO"),
-			Document:  os.Getenv("DOCUMENTO"),
-			Birthdate: os.Getenv("NACIMIENTO"),
-			Number:    os.Getenv("NUMERO"),
-		},
+		DatasetPath:   resolveDatasetPath(v.GetString("dataset.filepath"), v.GetString("id")),
+		MaxBatchSize:  v.GetInt("batch.maxAmount"),
 	}, nil
+}
+
+func resolveDatasetPath(path string, clientID string) string {
+	if path == "" {
+		return fmt.Sprintf("./agency-%s.csv", clientID)
+	}
+	return fmt.Sprintf(path, clientID)
+}
+
+func loadBetsFromCSV(csvPath string, agencyID string) (domain.BetRequest, error) {
+	file, err := os.Open(filepath.Clean(csvPath))
+	if err != nil {
+		return domain.BetRequest{}, err
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	records, err := reader.ReadAll()
+	if err != nil {
+		return domain.BetRequest{}, err
+	}
+
+	bets := make([]domain.Bet, 0, len(records))
+	for index, record := range records {
+		if len(record) != 5 {
+			return domain.BetRequest{}, fmt.Errorf("invalid csv row %d: expected 5 fields, got %d", index+1, len(record))
+		}
+		bets = append(bets, domain.Bet{
+			Agency:    agencyID,
+			FirstName: record[0],
+			LastName:  record[1],
+			Document:  record[2],
+			Birthdate: record[3],
+			Number:    record[4],
+		})
+	}
+
+	return domain.BetRequest{Bets: bets}, nil
 }
 
 func initLogger(logLevel string) error {
@@ -81,10 +120,12 @@ func initLogger(logLevel string) error {
 
 func printConfig(config clientConfig) {
 	log.Infof(
-		"action: config | result: success | client_id: %s | server_address: %s | log_level: %s",
+		"action: config | result: success | client_id: %s | server_address: %s | log_level: %s | dataset_path: %s | batch_max_amount: %d",
 		config.ID,
 		config.ServerAddress,
 		config.LogLevel,
+		config.DatasetPath,
+		config.MaxBatchSize,
 	)
 }
 
@@ -100,11 +141,18 @@ func main() {
 		return
 	}
 
+	config.Bet, err = loadBetsFromCSV(config.DatasetPath, config.ID)
+	if err != nil {
+		log.Criticalf("%s", err)
+		return
+	}
+
 	printConfig(config)
 
 	betClient := client.New(
 		config.ServerAddress,
 		config.ID,
+		config.MaxBatchSize,
 		protocol.NewBetMessageEncoder(),
 		protocol.NewServerResponseDecoder(),
 	)
@@ -113,9 +161,8 @@ func main() {
 	response, err := betClient.SendBet(config.Bet)
 	if err != nil {
 		log.Errorf(
-			"action: apuesta_enviada | result: fail | dni: %s | numero: %s | error: %v",
-			config.Bet.Document,
-			config.Bet.Number,
+			"action: apuesta_enviada | result: fail | cantidad: %d | error: %v",
+			len(config.Bet.Bets),
 			err,
 		)
 		return
@@ -123,9 +170,8 @@ func main() {
 
 	if !response.IsSuccess() {
 		log.Errorf(
-			"action: apuesta_enviada | result: fail | dni: %s | numero: %s | error_code: %s | error_message: %s",
-			config.Bet.Document,
-			config.Bet.Number,
+			"action: apuesta_enviada | result: fail | cantidad: %d | error_code: %s | error_message: %s",
+			len(config.Bet.Bets),
 			response.Code,
 			response.Message,
 		)
@@ -133,9 +179,8 @@ func main() {
 	}
 
 	log.Infof(
-		"action: apuesta_enviada | result: success | dni: %s | numero: %s",
-		config.Bet.Document,
-		config.Bet.Number,
+		"action: apuesta_enviada | result: success | cantidad: %d",
+		len(config.Bet.Bets),
 	)
 }
 

@@ -14,7 +14,7 @@ import (
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/internal/protocol"
 )
 
-const maxMessageSize = 4096
+const maxMessageSize = 8192
 const REQUEST_TIMEOUT = 5 * time.Second
 
 var log = logging.MustGetLogger("log")
@@ -22,52 +22,68 @@ var log = logging.MustGetLogger("log")
 type Client struct {
 	serverAddress string
 	clientID      string
+	maxBatchSize  int
+	maxBatchCount int
 	conn          net.Conn
 	encoder       *protocol.BetMessageEncoder
 	decoder       *protocol.ServerResponseDecoder
 	mu            sync.Mutex
 }
 
-func New(serverAddress string, clientID string, encoder *protocol.BetMessageEncoder, decoder *protocol.ServerResponseDecoder) *Client {
+func New(serverAddress string, clientID string, maxBatchCount int, encoder *protocol.BetMessageEncoder, decoder *protocol.ServerResponseDecoder) *Client {
 	return &Client{
 		serverAddress: serverAddress,
 		clientID:      clientID,
+		maxBatchSize:  maxMessageSize,
+		maxBatchCount: maxBatchCount,
 		encoder:       encoder,
 		decoder:       decoder,
 	}
 }
 
 func (c *Client) SendBet(bet domain.BetRequest) (domain.ServerResponse, error) {
-	message, err := c.encoder.EncodeBet(bet)
+	messages, err := c.encoder.EncodeBet(bet, c.maxBatchCount, c.maxBatchSize)
 	if err != nil {
 		return domain.ServerResponse{}, err
 	}
 
-	conn, err := net.DialTimeout("tcp", c.serverAddress, REQUEST_TIMEOUT)
-	if err != nil {
-		return domain.ServerResponse{}, err
+	var lastResponse domain.ServerResponse
+	for _, message := range messages {
+		conn, err := net.DialTimeout("tcp", c.serverAddress, REQUEST_TIMEOUT)
+		if err != nil {
+			return domain.ServerResponse{}, err
+		}
+		if err := conn.SetDeadline(time.Now().Add(REQUEST_TIMEOUT)); err != nil {
+			_ = conn.Close()
+			return domain.ServerResponse{}, err
+		}
+
+		c.mu.Lock()
+		c.conn = conn
+		c.mu.Unlock()
+
+		if err := writeAll(conn, message); err != nil {
+			_ = c.Close()
+			return domain.ServerResponse{}, err
+		}
+
+		responseBytes, err := readUntilDelimiter(conn, '\n', maxMessageSize)
+		if err != nil {
+			_ = c.Close()
+			return domain.ServerResponse{}, err
+		}
+
+		lastResponse, err = c.decoder.DecodeResponse(responseBytes)
+		_ = c.Close()
+		if err != nil {
+			return domain.ServerResponse{}, err
+		}
+		if !lastResponse.IsSuccess() {
+			return lastResponse, nil
+		}
 	}
-	if err := conn.SetDeadline(time.Now().Add(REQUEST_TIMEOUT)); err != nil {
-		_ = conn.Close()
-		return domain.ServerResponse{}, err
-	}
 
-	c.mu.Lock()
-	c.conn = conn
-	c.mu.Unlock()
-
-	defer c.Close()
-
-	if err := writeAll(conn, message); err != nil {
-		return domain.ServerResponse{}, err
-	}
-
-	responseBytes, err := readUntilDelimiter(conn, '\n', maxMessageSize)
-	if err != nil {
-		return domain.ServerResponse{}, err
-	}
-
-	return c.decoder.DecodeResponse(responseBytes)
+	return lastResponse, nil
 }
 
 func (c *Client) Close() error {

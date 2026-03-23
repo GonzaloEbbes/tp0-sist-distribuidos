@@ -5,5 +5,7 @@ loop:
   period: "100ms"
 log:
   level: "DEBUG"
+dataset:
+  filepath: "./agency-%s.csv"
 batch:
   maxAmount: 10

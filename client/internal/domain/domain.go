@@ -1,6 +1,10 @@
 package domain
 
 type BetRequest struct {
+	Bets []Bet
+}
+
+type Bet struct {
 	Agency    string
 	FirstName string
 	LastName  string

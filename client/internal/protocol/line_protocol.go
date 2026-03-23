@@ -23,28 +23,44 @@ func NewServerResponseDecoder() *ServerResponseDecoder {
 	return &ServerResponseDecoder{}
 }
 
-func (e *BetMessageEncoder) EncodeBet(bet domain.BetRequest) ([]byte, error) {
-	fields := []struct {
-		key   string
-		value string
-	}{
-		{key: "agency", value: bet.Agency},
-		{key: "nombre", value: bet.FirstName},
-		{key: "apellido", value: bet.LastName},
-		{key: "documento", value: bet.Document},
-		{key: "nacimiento", value: bet.Birthdate},
-		{key: "numero", value: bet.Number},
+func (e *BetMessageEncoder) EncodeBet(bet domain.BetRequest, maxBatchAmount int, maxBatchSize int) ([][]byte, error) {
+	if maxBatchAmount <= 0 {
+		return nil, fmt.Errorf("invalid max batch amount")
 	}
 
-	parts := make([]string, 0, len(fields))
-	for _, field := range fields {
-		if containsReservedChar(field.value) {
-			return nil, fmt.Errorf("invalid value for field %s", field.key)
+	batches := make([][]byte, 0)
+	currentBatch := make([]string, 0, maxBatchAmount)
+
+	for _, singleBet := range bet.Bets {
+		encodedBet, err := encodeSingleBet(singleBet)
+		if err != nil {
+			return nil, err
 		}
-		parts = append(parts, fmt.Sprintf("%s=%s", field.key, field.value))
+
+		candidateBatch := append(currentBatch, encodedBet)
+		candidateMessage := []byte(strings.Join(candidateBatch, ",") + string(messageDelimiter))
+		if len(candidateMessage) > maxBatchSize {
+			if len(currentBatch) == 0 {
+				return nil, fmt.Errorf("bet exceeds maximum batch size")
+			}
+
+			batches = append(batches, []byte(strings.Join(currentBatch, ",")+string(messageDelimiter)))
+			currentBatch = []string{encodedBet}
+			continue
+		}
+
+		currentBatch = candidateBatch
+		if len(currentBatch) == maxBatchAmount {
+			batches = append(batches, []byte(strings.Join(currentBatch, ",")+string(messageDelimiter)))
+			currentBatch = make([]string, 0, maxBatchAmount)
+		}
 	}
 
-	return []byte(strings.Join(parts, "|") + string(messageDelimiter)), nil
+	if len(currentBatch) > 0 {
+		batches = append(batches, []byte(strings.Join(currentBatch, ",")+string(messageDelimiter)))
+	}
+
+	return batches, nil
 }
 
 func (d *ServerResponseDecoder) DecodeResponse(message []byte) (domain.ServerResponse, error) {
@@ -102,4 +118,28 @@ func containsReservedChar(value string) bool {
 		}
 	}
 	return false
+}
+
+func encodeSingleBet(singleBet domain.Bet) (string, error) {
+	fields := []struct {
+		key   string
+		value string
+	}{
+		{key: "agency", value: singleBet.Agency},
+		{key: "nombre", value: singleBet.FirstName},
+		{key: "apellido", value: singleBet.LastName},
+		{key: "documento", value: singleBet.Document},
+		{key: "nacimiento", value: singleBet.Birthdate},
+		{key: "numero", value: singleBet.Number},
+	}
+
+	parts := make([]string, 0, len(fields))
+	for _, field := range fields {
+		if containsReservedChar(field.value) {
+			return "", fmt.Errorf("invalid value for field %s", field.key)
+		}
+		parts = append(parts, fmt.Sprintf("%s=%s", field.key, field.value))
+	}
+
+	return strings.Join(parts, "|"), nil
 }
