@@ -4,6 +4,7 @@
 # Executables
 bin/
 .gocache/
+.data/dataset/
 
 # Notas sobre ejs y logs guardados
 /info*

@@ -38,22 +38,6 @@ type SubnetConfig struct {
 	Subnet string `yaml:"subnet"`
 }
 
-type BetEnvConfig struct {
-	FirstName string
-	LastName  string
-	Document  string
-	Birthdate string
-	Number    string
-}
-
-var defaultBetEnvConfig = BetEnvConfig{
-	FirstName: "Santiago Lionel",
-	LastName:  "Lorca",
-	Document:  "30904465",
-	Birthdate: "1999-03-17",
-	Number:    "7574",
-}
-
 func main() {
 	if err := run(os.Args); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
@@ -63,12 +47,11 @@ func main() {
 
 func run(args []string) error {
 	if len(args) < 3 {
-		return fmt.Errorf("usage: composer <output_file> <client_count> [nombre] [apellido] [documento] [nacimiento] [numero]")
+		return fmt.Errorf("usage: composer <output_file> <client_count>")
 	}
 
 	outputFile := args[1]
 	clientCountStr := args[2]
-	betEnvConfig := parseBetEnvConfig(args[3:])
 
 	clientCount, err := strconv.Atoi(clientCountStr)
 	if err != nil {
@@ -90,7 +73,7 @@ func run(args []string) error {
 		},
 	}
 
-	addServices(&AppConfig, clientCount, betEnvConfig)
+	addServices(&AppConfig, clientCount)
 
 	rawFileContent, err := generateRawFileContent(AppConfig)
 	if err != nil {
@@ -104,7 +87,7 @@ func run(args []string) error {
 	return nil
 }
 
-func addServices(appConfig *AppConfig, clientCount int, betEnvConfig BetEnvConfig) {
+func addServices(appConfig *AppConfig, clientCount int) {
 	services := make(map[string]ServiceConfig, clientCount+1) // +1 para el server
 	services["server"] = ServiceConfig{
 		ContainerName: "server",
@@ -112,53 +95,31 @@ func addServices(appConfig *AppConfig, clientCount int, betEnvConfig BetEnvConfi
 		Entrypoint:    "/server",
 		Environment:   []string{},
 		Networks:      []string{"testing_net"},
-		Volumes:   []string{"./server/config.ini:/config.ini"},
+		Volumes:       []string{"./server/config.ini:/config.ini"},
 		DependsOn: nil,
 	}
 
 	for i := 1; i <= clientCount; i++ {
+		datasetPath := fmt.Sprintf("/data/agency-%d.csv", i)
 		clientService := ServiceConfig{
 			ContainerName: fmt.Sprintf("client%d", i),
 			Image:         "client:latest",
 			Entrypoint:    "/client",
 			Environment: []string{
 				"CLI_ID=" + fmt.Sprintf("%d", i),
-				"NOMBRE=" + betEnvConfig.FirstName,
-				"APELLIDO=" + betEnvConfig.LastName,
-				"DOCUMENTO=" + betEnvConfig.Document,
-				"NACIMIENTO=" + betEnvConfig.Birthdate,
-				"NUMERO=" + betEnvConfig.Number,
+				"CLI_DATASET_FILEPATH=" + datasetPath,
 			},
 			DependsOn: []string{"server"},
 			Networks:  []string{"testing_net"},
-			Volumes:   []string{"./client/config.yaml:/config.yaml"},
+			Volumes: []string{
+				"./client/config.yaml:/config.yaml",
+				fmt.Sprintf("./.data/dataset/agency-%d.csv:%s", i, datasetPath),
+			},
 		}
 		services[fmt.Sprintf("client%d", i)] = clientService
 	}
 
 	appConfig.Services = services
-}
-
-func parseBetEnvConfig(args []string) BetEnvConfig {
-	betEnvConfig := defaultBetEnvConfig
-
-	if len(args) > 0 && args[0] != "" {
-		betEnvConfig.FirstName = args[0]
-	}
-	if len(args) > 1 && args[1] != "" {
-		betEnvConfig.LastName = args[1]
-	}
-	if len(args) > 2 && args[2] != "" {
-		betEnvConfig.Document = args[2]
-	}
-	if len(args) > 3 && args[3] != "" {
-		betEnvConfig.Birthdate = args[3]
-	}
-	if len(args) > 4 && args[4] != "" {
-		betEnvConfig.Number = args[4]
-	}
-
-	return betEnvConfig
 }
 
 func generateRawFileContent(appConfig AppConfig) ([]byte, error) {
