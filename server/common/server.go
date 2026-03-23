@@ -13,7 +13,7 @@ import (
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/server/internal/ports"
 )
 
-const maxMessageSize = 4096
+const maxMessageSize = 8192
 
 var log = logging.MustGetLogger("log")
 

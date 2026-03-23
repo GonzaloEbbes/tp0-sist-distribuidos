@@ -2,8 +2,10 @@ package domain
 
 import "time"
 
+type BetAttempt map[string]string
+
 type BetRequest struct {
-	Fields map[string]string
+	Bets []BetAttempt
 }
 
 type Bet struct {

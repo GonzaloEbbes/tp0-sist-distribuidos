@@ -22,33 +22,50 @@ func NewRegisterBet(repository ports.BetRepository) *RegisterBet {
 }
 
 func (uc *RegisterBet) Register(request domain.BetRequest) domain.Response {
-	requiredFields := []string{"agency", "nombre", "apellido", "documento", "nacimiento", "numero"}
-	for _, field := range requiredFields {
-		value, ok := request.Fields[field]
-		if !ok || value == "" {
-			return domain.NewErrorResponse("missing_field", fmt.Sprintf("%s is required", field))
+	secuteBets := make([]domain.Bet, 0, len(request.Bets))
+
+	for _, bet := range request.Bets {
+		requiredFields := []string{"agency", "nombre", "apellido", "documento", "nacimiento", "numero"}
+		for _, field := range requiredFields {
+			value, ok := bet[field]
+			if !ok || value == "" {
+				log.Infof(
+					"action: apuesta_recibida | result: fail | cantidad: %d",
+					len(request.Bets),
+				)
+				return domain.NewErrorResponse("missing_field", fmt.Sprintf("%s is required", field))
+			}
 		}
-	}
 
-	for field := range request.Fields {
-		if !isAllowedField(field) {
-			return domain.NewErrorResponse("unknown_field", fmt.Sprintf("unknown field %s", field))
+		for field := range bet {
+			if !isAllowedField(field) {
+				log.Infof(
+					"action: apuesta_recibida | result: fail | cantidad: %d",
+					len(request.Bets),
+				)
+				return domain.NewErrorResponse("unknown_field", fmt.Sprintf("unknown field %s", field))
+			}
 		}
+
+		bet, err := buildDomainBet(bet)
+		if err != nil {
+			log.Infof(
+				"action: apuesta_recibida | result: fail | cantidad: %d",
+				len(request.Bets),
+			)
+			return domain.NewErrorResponse("invalid_field_format", err.Error())
+		}
+
+		secuteBets = append(secuteBets, bet)
 	}
 
-	bet, err := buildDomainBet(request.Fields)
-	if err != nil {
-		return domain.NewErrorResponse("invalid_field_format", err.Error())
-	}
-
-	if err := uc.repository.Store(bet); err != nil {
+	if err := uc.repository.StoreBatch(secuteBets); err != nil {
 		return domain.NewErrorResponse("storage_error", err.Error())
 	}
 
 	log.Infof(
-		"action: apuesta_almacenada | result: success | dni: %s | numero: %s",
-		request.Fields["documento"],
-		request.Fields["numero"],
+		"action: apuesta_recibida | result: success | cantidad: %d",
+		len(request.Bets),
 	)
 	return domain.NewSuccessResponse()
 }

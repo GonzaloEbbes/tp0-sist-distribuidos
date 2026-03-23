@@ -11,6 +11,15 @@ type repositoryStub struct {
 	err    error
 }
 
+func (r *repositoryStub) StoreBatch(bets []domain.Bet) error {
+	if r.err != nil {
+		return r.err
+	}
+	r.stored = append(r.stored, bets...)
+	return nil
+}
+
+// Deprecated: use StoreBatch instead.
 func (r *repositoryStub) Store(bet domain.Bet) error {
 	if r.err != nil {
 		return r.err
@@ -24,14 +33,14 @@ func TestRegisterMustPersistValidBet(t *testing.T) {
 	useCase := NewRegisterBet(repository)
 
 	response := useCase.Register(domain.BetRequest{
-		Fields: map[string]string{
+		Bets: []domain.BetAttempt{{
 			"agency":     "1",
 			"nombre":     "John",
 			"apellido":   "Doe",
 			"documento":  "123",
 			"nacimiento": "2000-01-01",
 			"numero":     "7574",
-		},
+		}},
 	})
 
 	if response.Status != "ok" {
@@ -47,7 +56,7 @@ func TestRegisterMustRejectUnknownField(t *testing.T) {
 	useCase := NewRegisterBet(repository)
 
 	response := useCase.Register(domain.BetRequest{
-		Fields: map[string]string{
+		Bets: []domain.BetAttempt{{
 			"agency":     "1",
 			"nombre":     "John",
 			"apellido":   "Doe",
@@ -55,7 +64,7 @@ func TestRegisterMustRejectUnknownField(t *testing.T) {
 			"nacimiento": "2000-01-01",
 			"numero":     "7574",
 			"extra":      "value",
-		},
+		}},
 	})
 
 	if response.Code != "unknown_field" {

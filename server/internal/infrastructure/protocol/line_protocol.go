@@ -30,7 +30,7 @@ func (d *BetMessageDecoder) DecodeRequest(message []byte) (domain.BetRequest, *d
 		return domain.BetRequest{}, &errorResponse
 	}
 
-	return domain.BetRequest{Fields: fields}, nil
+	return domain.BetRequest{Bets: fields}, nil
 }
 
 func (e *ResponseEncoder) Encode(response domain.Response) ([]byte, error) {
@@ -65,7 +65,7 @@ func (e *ResponseEncoder) Encode(response domain.Response) ([]byte, error) {
 	return []byte(strings.Join(parts, "|") + string(messageDelimiter)), nil
 }
 
-func decodeKeyValueMessage(message []byte) (map[string]string, error) {
+func decodeKeyValueMessage(message []byte) ([]domain.BetAttempt, error) {
 	if len(message) == 0 || message[len(message)-1] != messageDelimiter {
 		return nil, fmt.Errorf("message does not end with delimiter")
 	}
@@ -75,27 +75,36 @@ func decodeKeyValueMessage(message []byte) (map[string]string, error) {
 		return nil, fmt.Errorf("empty message")
 	}
 
-	tokens := strings.Split(payload, "|")
-	fields := make(map[string]string, len(tokens))
-	for _, token := range tokens {
-		if token == "" {
-			return nil, fmt.Errorf("empty token")
-		}
+	registers := strings.Split(payload, ",")
+	bets := make([]domain.BetAttempt, 0, len(registers))
+	for index, register := range registers {
+		tokens := strings.Split(register, "|")
+		fields := make(map[string]string, len(tokens))
+		for _, token := range tokens {
+			if token == "" {
+				return nil, fmt.Errorf("empty token")
+			}
 
-		parts := strings.SplitN(token, "=", 2)
-		if len(parts) != 2 || parts[0] == "" {
-			return nil, fmt.Errorf("malformed token %q", token)
+			parts := strings.SplitN(token, "=", 2)
+			if len(parts) != 2 || parts[0] == "" {
+				return nil, fmt.Errorf("malformed token %q", token)
+			}
+			if _, exists := fields[parts[0]]; exists {
+				return nil, fmt.Errorf("duplicate field %s", parts[0])
+			}
+			if containsReservedChar(parts[1]) {
+				return nil, fmt.Errorf("invalid value for field %s", parts[0])
+			}
+			fields[parts[0]] = parts[1]
 		}
-		if _, exists := fields[parts[0]]; exists {
-			return nil, fmt.Errorf("duplicate field %s", parts[0])
+		if index >= len(bets) {
+			bets = append(bets, fields)
+			continue
 		}
-		if containsReservedChar(parts[1]) {
-			return nil, fmt.Errorf("invalid value for field %s", parts[0])
-		}
-		fields[parts[0]] = parts[1]
+		bets[index] = fields
 	}
 
-	return fields, nil
+	return bets, nil
 }
 
 func containsReservedChar(value string) bool {

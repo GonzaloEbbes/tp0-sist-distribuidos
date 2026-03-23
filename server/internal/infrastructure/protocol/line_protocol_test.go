@@ -14,11 +14,14 @@ func TestDecodeRequestMustParseValidMessage(t *testing.T) {
 		t.Fatalf("unexpected protocol error: %+v", *protocolErr)
 	}
 
-	if request.Fields["agency"] != "1" {
-		t.Fatalf("expected agency 1, got %s", request.Fields["agency"])
+	if len(request.Bets) != 1 {
+		t.Fatalf("expected 1 bet, got %d", len(request.Bets))
 	}
-	if request.Fields["numero"] != "7574" {
-		t.Fatalf("expected numero 7574, got %s", request.Fields["numero"])
+	if request.Bets[0]["agency"] != "1" {
+		t.Fatalf("expected agency 1, got %s", request.Bets[0]["agency"])
+	}
+	if request.Bets[0]["numero"] != "7574" {
+		t.Fatalf("expected numero 7574, got %s", request.Bets[0]["numero"])
 	}
 }
 

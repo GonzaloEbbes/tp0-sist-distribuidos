@@ -3,6 +3,7 @@
 
 # Executables
 bin/
+.gocache/
 
 # Notas sobre ejs y logs guardados
 /info*
