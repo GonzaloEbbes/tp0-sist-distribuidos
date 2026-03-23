@@ -145,7 +145,8 @@ func (s *Server) acceptNewConnection() net.Conn {
 		if s.isShutdownRequested() {
 			return nil
 		}
-		panic(err)
+		log.Errorf("action: accept_connections | result: fail | error: %v", err)
+		return nil
 	}
 
 	addr := clientConn.RemoteAddr().(*net.TCPAddr)

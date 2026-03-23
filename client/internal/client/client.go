@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/op/go-logging"
 
@@ -14,6 +15,7 @@ import (
 )
 
 const maxMessageSize = 4096
+const REQUEST_TIMEOUT = 5 * time.Second
 
 var log = logging.MustGetLogger("log")
 
@@ -41,8 +43,12 @@ func (c *Client) SendBet(bet domain.BetRequest) (domain.ServerResponse, error) {
 		return domain.ServerResponse{}, err
 	}
 
-	conn, err := net.Dial("tcp", c.serverAddress)
+	conn, err := net.DialTimeout("tcp", c.serverAddress, REQUEST_TIMEOUT)
 	if err != nil {
+		return domain.ServerResponse{}, err
+	}
+	if err := conn.SetDeadline(time.Now().Add(REQUEST_TIMEOUT)); err != nil {
+		_ = conn.Close()
 		return domain.ServerResponse{}, err
 	}
 
