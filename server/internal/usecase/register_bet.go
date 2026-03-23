@@ -60,6 +60,10 @@ func (uc *RegisterBet) Register(request domain.BetRequest) domain.Response {
 	}
 
 	if err := uc.repository.StoreBatch(secuteBets); err != nil {
+		log.Infof(
+			"action: apuesta_recibida | result: fail | cantidad: %d",
+			len(request.Bets),
+		)
 		return domain.NewErrorResponse("storage_error", err.Error())
 	}
 
