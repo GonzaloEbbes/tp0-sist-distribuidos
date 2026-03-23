@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/op/go-logging"
@@ -108,7 +109,7 @@ func (s *Server) handleClientConnection(clientConn net.Conn) {
 	}
 
 	addr := clientConn.RemoteAddr().(*net.TCPAddr)
-	log.Infof("action: receive_message | result: success | ip: %s | msg: %s", addr.IP.String(), string(bytes.TrimSpace(requestBytes)))
+	log.Infof("action: receive_message | result: success | ip: %s | msg: %s", addr.IP.String(), strings.ReplaceAll(string(bytes.TrimSpace(requestBytes)), "|", "/"))
 
 	request, decodeErr := s.decoder.DecodeRequest(requestBytes)
 	if decodeErr != nil {
