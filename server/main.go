@@ -18,10 +18,13 @@ import (
 var log = logging.MustGetLogger("log")
 
 type configParams struct {
-	port          int
-	listenBacklog int
-	loggingLevel  string
+	port             int
+	listenBacklog    int
+	loggingLevel     string
+	expectedAgencies int
 }
+
+const DEFAULT_EXPECTED_AGENCIES = 5
 
 func initializeConfig() (configParams, error) {
 	cfg := ini.Empty()
@@ -44,6 +47,11 @@ func initializeConfig() (configParams, error) {
 		loggingLevelValue = defaultSection.Key("LOGGING_LEVEL").String()
 	}
 
+	expectedAgenciesValue := os.Getenv("SERVER_EXPECTED_AGENCIES")
+	if expectedAgenciesValue == "" {
+		expectedAgenciesValue = defaultSection.Key("SERVER_EXPECTED_AGENCIES").MustString(strconv.Itoa(DEFAULT_EXPECTED_AGENCIES))
+	}
+
 	port, err := strconv.Atoi(portValue)
 	if err != nil {
 		return configParams{}, err
@@ -54,10 +62,16 @@ func initializeConfig() (configParams, error) {
 		return configParams{}, err
 	}
 
+	expectedAgencies, err := strconv.Atoi(expectedAgenciesValue)
+	if err != nil {
+		return configParams{}, err
+	}
+
 	return configParams{
-		port:          port,
-		listenBacklog: listenBacklog,
-		loggingLevel:  loggingLevelValue,
+		port:             port,
+		listenBacklog:    listenBacklog,
+		loggingLevel:     loggingLevelValue,
+		expectedAgencies: expectedAgencies,
 	}, nil
 }
 
@@ -91,10 +105,11 @@ func main() {
 		return
 	}
 
-	log.Debugf("action: config | result: success | port: %d | listen_backlog: %d | logging_level: %s",
+	log.Debugf("action: config | result: success | port: %d | listen_backlog: %d | logging_level: %s | expected_agencies: %d",
 		config.port,
 		config.listenBacklog,
 		config.loggingLevel,
+		config.expectedAgencies,
 	)
 
 	registerBet := usecase.NewRegisterBet(repository.NewBetRepository())
