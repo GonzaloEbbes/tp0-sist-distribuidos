@@ -11,7 +11,7 @@ import (
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/server/internal/ports"
 )
 
-var log = logging.MustGetLogger("log")
+var registerBetLog = logging.MustGetLogger("log")
 
 type RegisterBet struct {
 	repository ports.BetRepository
@@ -21,7 +21,7 @@ func NewRegisterBet(repository ports.BetRepository) *RegisterBet {
 	return &RegisterBet{repository: repository}
 }
 
-func (uc *RegisterBet) Register(request domain.BetRequest) domain.Response {
+func (uc *RegisterBet) Register(request domain.BetBatchRequest) domain.Response {
 	secuteBets := make([]domain.Bet, 0, len(request.Bets))
 
 	for _, bet := range request.Bets {
@@ -29,7 +29,7 @@ func (uc *RegisterBet) Register(request domain.BetRequest) domain.Response {
 		for _, field := range requiredFields {
 			value, ok := bet[field]
 			if !ok || value == "" {
-				log.Infof(
+				registerBetLog.Infof(
 					"action: apuesta_recibida | result: fail | cantidad: %d",
 					len(request.Bets),
 				)
@@ -39,7 +39,7 @@ func (uc *RegisterBet) Register(request domain.BetRequest) domain.Response {
 
 		for field := range bet {
 			if !isAllowedField(field) {
-				log.Infof(
+				registerBetLog.Infof(
 					"action: apuesta_recibida | result: fail | cantidad: %d",
 					len(request.Bets),
 				)
@@ -49,7 +49,7 @@ func (uc *RegisterBet) Register(request domain.BetRequest) domain.Response {
 
 		bet, err := buildDomainBet(bet)
 		if err != nil {
-			log.Infof(
+			registerBetLog.Infof(
 				"action: apuesta_recibida | result: fail | cantidad: %d",
 				len(request.Bets),
 			)
@@ -60,14 +60,14 @@ func (uc *RegisterBet) Register(request domain.BetRequest) domain.Response {
 	}
 
 	if err := uc.repository.StoreBatch(secuteBets); err != nil {
-		log.Infof(
+		registerBetLog.Infof(
 			"action: apuesta_recibida | result: fail | cantidad: %d",
 			len(request.Bets),
 		)
 		return domain.NewErrorResponse("storage_error", err.Error())
 	}
 
-	log.Infof(
+	registerBetLog.Infof(
 		"action: apuesta_recibida | result: success | cantidad: %d",
 		len(request.Bets),
 	)

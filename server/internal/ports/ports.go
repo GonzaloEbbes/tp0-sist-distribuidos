@@ -3,7 +3,7 @@ package ports
 import "github.com/7574-sistemas-distribuidos/docker-compose-init/server/internal/domain"
 
 type BetMessageDecoder interface {
-	DecodeRequest([]byte) (domain.BetRequest, *domain.Response)
+	Process([]byte) domain.Response
 }
 
 type ResponseEncoder interface {
@@ -11,7 +11,15 @@ type ResponseEncoder interface {
 }
 
 type BetRegistrar interface {
-	Register(domain.BetRequest) domain.Response
+	Register(domain.BetBatchRequest) domain.Response
+}
+
+type AgencyFinisher interface {
+	Finish(domain.FinishAgencyRequest) domain.Response
+}
+
+type WinnersQuerier interface {
+	Query(domain.WinnersQueryRequest) domain.Response
 }
 
 type BetRepository interface {

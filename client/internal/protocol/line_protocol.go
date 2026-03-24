@@ -24,6 +24,14 @@ func NewServerResponseDecoder() *ServerResponseDecoder {
 }
 
 func (e *BetMessageEncoder) EncodeBet(bet domain.BetRequest, maxBatchAmount int, maxBatchSize int) ([][]byte, error) {
+	switch bet.Type {
+	case domain.MessageTypeFinish, domain.MessageTypeWinnersQuery:
+		if bet.Agency == "" {
+			return nil, fmt.Errorf("missing agency for message type %s", bet.Type)
+		}
+		return [][]byte{encodeAgencyMessage(bet.Type, bet.Agency)}, nil
+	}
+
 	if maxBatchAmount <= 0 {
 		return nil, fmt.Errorf("invalid max batch amount")
 	}
@@ -149,4 +157,8 @@ func encodeSingleBet(singleBet domain.Bet) (string, error) {
 
 func encodeBatch(batch []string, messageType string) []byte {
 	return []byte(fmt.Sprintf("type=%s|%s%s", messageType, strings.Join(batch, ","), string(messageDelimiter)))
+}
+
+func encodeAgencyMessage(messageType string, agency string) []byte {
+	return []byte(fmt.Sprintf("type=%s|agency=%s%s", messageType, agency, string(messageDelimiter)))
 }

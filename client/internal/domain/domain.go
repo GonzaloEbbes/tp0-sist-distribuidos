@@ -1,10 +1,13 @@
 package domain
 
 const MessageTypeBetBatch = "bet_batch"
+const MessageTypeFinish = "finish"
+const MessageTypeWinnersQuery = "winners_query"
 
 type BetRequest struct {
-	Type string
-	Bets []Bet
+	Type   string
+	Agency string
+	Bets   []Bet
 }
 
 type Bet struct {
@@ -24,4 +27,8 @@ type ServerResponse struct {
 
 func (r ServerResponse) IsSuccess() bool {
 	return r.Status == "ok"
+}
+
+func (r ServerResponse) IsDrawNotReady() bool {
+	return r.Code == "draw_not_ready"
 }

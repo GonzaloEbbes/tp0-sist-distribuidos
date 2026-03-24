@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/server/internal/domain"
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/server/internal/ports"
 )
 
 const messageDelimiter = '\n'
@@ -12,6 +13,11 @@ const messageDelimiter = '\n'
 var reservedValueChars = []string{"|", "=", ",", "\n"}
 
 type BetMessageDecoder struct{}
+type MessageProcessor struct {
+	betRegistrar   ports.BetRegistrar
+	agencyFinisher ports.AgencyFinisher
+	winnersQuerier ports.WinnersQuerier
+}
 
 type ResponseEncoder struct{}
 
@@ -19,29 +25,46 @@ func NewBetMessageDecoder() *BetMessageDecoder {
 	return &BetMessageDecoder{}
 }
 
+func NewMessageProcessor(betRegistrar ports.BetRegistrar, agencyFinisher ports.AgencyFinisher, winnersQuerier ports.WinnersQuerier) *MessageProcessor {
+	return &MessageProcessor{
+		betRegistrar:   betRegistrar,
+		agencyFinisher: agencyFinisher,
+		winnersQuerier: winnersQuerier,
+	}
+}
+
 func NewResponseEncoder() *ResponseEncoder {
 	return &ResponseEncoder{}
 }
 
-func (d *BetMessageDecoder) DecodeRequest(message []byte) (domain.BetRequest, *domain.Response) {
+func (p *MessageProcessor) Process(message []byte) domain.Response {
+	messageType, fields, protocolErr := decodeMessage(message)
+	if protocolErr != nil {
+		return *protocolErr
+	}
+
+	return p.buildRequestByType(messageType, fields)
+}
+
+func decodeMessage(message []byte) (string, []domain.BetAttempt, *domain.Response) {
 	fields, err := decodeKeyValueMessage(message)
 	if err != nil {
 		errorResponse := domain.NewErrorResponse("malformed_message", err.Error())
-		return domain.BetRequest{}, &errorResponse
+		return "", nil, &errorResponse
 	}
 
 	if len(fields) == 0 {
 		errorResponse := domain.NewErrorResponse("malformed_message", "empty message")
-		return domain.BetRequest{}, &errorResponse
+		return "", nil, &errorResponse
 	}
 
 	messageType, ok := fields[0]["type"]
 	if !ok || messageType == "" {
 		errorResponse := domain.NewErrorResponse("malformed_message", "missing type in request")
-		return domain.BetRequest{}, &errorResponse
+		return "", nil, &errorResponse
 	}
 
-	return buildRequestByType(messageType, fields)
+	return messageType, fields, nil
 }
 
 func (e *ResponseEncoder) Encode(response domain.Response) ([]byte, error) {
@@ -127,7 +150,7 @@ func containsReservedChar(value string) bool {
 	return false
 }
 
-func buildRequestByType(messageType string, fields []domain.BetAttempt) (domain.BetRequest, *domain.Response) {
+func (p *MessageProcessor) buildRequestByType(messageType string, fields []domain.BetAttempt) domain.Response {
 	// This would probably fit better in another layer. A use case whose only job is
 	// switching by message type does not sound especially appropriate, and adding a
 	// dedicated handler layer right now would be mostly boilerplate for too little
@@ -135,9 +158,20 @@ func buildRequestByType(messageType string, fields []domain.BetAttempt) (domain.
 	switch messageType {
 	case domain.MessageTypeBetBatch:
 		delete(fields[0], "type")
-		return domain.BetRequest{Type: messageType, Bets: fields}, nil
+		return p.betRegistrar.Register(domain.BetBatchRequest{Bets: fields})
+	case domain.MessageTypeFinish:
+		agency, ok := fields[0]["agency"]
+		if !ok || agency == "" {
+			return domain.NewErrorResponse("malformed_message", "missing agency in request")
+		}
+		return p.agencyFinisher.Finish(domain.FinishAgencyRequest{Agency: agency})
+	case domain.MessageTypeWinnersQuery:
+		agency, ok := fields[0]["agency"]
+		if !ok || agency == "" {
+			return domain.NewErrorResponse("malformed_message", "missing agency in request")
+		}
+		return p.winnersQuerier.Query(domain.WinnersQueryRequest{Agency: agency})
 	default:
-		errorResponse := domain.NewErrorResponse("malformed_message", fmt.Sprintf("unsupported message type %s", messageType))
-		return domain.BetRequest{}, &errorResponse
+		return domain.NewErrorResponse("malformed_message", fmt.Sprintf("unsupported message type %s", messageType))
 	}
 }

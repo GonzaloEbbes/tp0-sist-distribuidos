@@ -16,6 +16,7 @@ import (
 
 const maxMessageSize = 8192
 const REQUEST_TIMEOUT = 5 * time.Second
+const drawRetryDelay = 100 * time.Millisecond
 
 var log = logging.MustGetLogger("log")
 
@@ -84,6 +85,23 @@ func (c *Client) SendBet(bet domain.BetRequest) (domain.ServerResponse, error) {
 	}
 
 	return lastResponse, nil
+}
+
+func (c *Client) SendRequest(request domain.BetRequest) (domain.ServerResponse, error) {
+	return c.SendBet(request)
+}
+
+func (c *Client) QueryWinnersUntilReady(request domain.BetRequest) (domain.ServerResponse, error) {
+	for {
+		response, err := c.SendRequest(request)
+		if err != nil {
+			return domain.ServerResponse{}, err
+		}
+		if !response.IsDrawNotReady() {
+			return response, nil
+		}
+		time.Sleep(drawRetryDelay)
+	}
 }
 
 func (c *Client) Close() error {

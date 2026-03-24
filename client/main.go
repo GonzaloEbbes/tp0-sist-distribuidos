@@ -105,8 +105,9 @@ func loadBetsFromCSV(csvPath string, agencyID string) (domain.BetRequest, error)
 
 func newBetRequest(bets []domain.Bet) domain.BetRequest {
 	return domain.BetRequest{
-		Type: domain.MessageTypeBetBatch,
-		Bets: bets,
+		Type:   domain.MessageTypeBetBatch,
+		Agency: bets[0].Agency,
+		Bets:   bets,
 	}
 }
 
@@ -192,6 +193,48 @@ func main() {
 		"action: apuesta_enviada | result: success | cantidad: %d",
 		len(config.Bet.Bets),
 	)
+
+	finishResponse, err := betClient.SendRequest(domain.BetRequest{
+		Type:   domain.MessageTypeFinish,
+		Agency: config.ID,
+	})
+	if err != nil {
+		log.Errorf("action: fin_agencia | result: fail | agency: %s | error: %v", config.ID, err)
+		return
+	}
+	if !finishResponse.IsSuccess() {
+		log.Errorf("action: fin_agencia | result: fail | agency: %s | error_code: %s | error_message: %s", config.ID, finishResponse.Code, finishResponse.Message)
+		return
+	}
+
+	winnersResponse, err := betClient.QueryWinnersUntilReady(domain.BetRequest{
+		Type:   domain.MessageTypeWinnersQuery,
+		Agency: config.ID,
+	})
+	if err != nil {
+		log.Errorf("action: consulta_ganadores | result: fail | error: %v", err)
+		return
+	}
+	if !winnersResponse.IsSuccess() {
+		log.Errorf(
+			"action: consulta_ganadores | result: fail | error_code: %s | error_message: %s",
+			winnersResponse.Code,
+			winnersResponse.Message,
+		)
+		return
+	}
+
+	log.Infof(
+		"action: consulta_ganadores | result: success | cant_ganadores: %d",
+		countWinners(winnersResponse.Message),
+	)
+}
+
+func countWinners(message string) int {
+	if message == "" {
+		return 0
+	}
+	return len(strings.Split(message, ","))
 }
 
 func setTerminateHandler(client *client.Client) {

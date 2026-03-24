@@ -112,13 +112,15 @@ func main() {
 		config.expectedAgencies,
 	)
 
+	drawState := usecase.NewDrawState(config.expectedAgencies)
 	registerBet := usecase.NewRegisterBet(repository.NewBetRepository())
+	finishAgency := usecase.NewFinishAgency(drawState)
+	queryWinners := usecase.NewQueryWinners(drawState)
 	server, err := common.NewServer(
 		config.port,
 		config.listenBacklog,
-		protocol.NewBetMessageDecoder(),
+		protocol.NewMessageProcessor(registerBet, finishAgency, queryWinners),
 		protocol.NewResponseEncoder(),
-		registerBet,
 	)
 	if err != nil {
 		log.Criticalf("%s", err)

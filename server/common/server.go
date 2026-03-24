@@ -23,11 +23,10 @@ type Server struct {
 	serverListener    net.Listener
 	decoder           ports.BetMessageDecoder
 	encoder           ports.ResponseEncoder
-	registerBet       ports.BetRegistrar
 	mu                sync.Mutex
 }
 
-func NewServer(port int, listenBacklog int, decoder ports.BetMessageDecoder, encoder ports.ResponseEncoder, registerBet ports.BetRegistrar) (*Server, error) {
+func NewServer(port int, listenBacklog int, decoder ports.BetMessageDecoder, encoder ports.ResponseEncoder) (*Server, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, err
@@ -37,7 +36,6 @@ func NewServer(port int, listenBacklog int, decoder ports.BetMessageDecoder, enc
 		serverListener: listener,
 		decoder:        decoder,
 		encoder:        encoder,
-		registerBet:    registerBet,
 	}, nil
 }
 
@@ -107,13 +105,7 @@ func (s *Server) handleClientConnection(clientConn net.Conn) {
 		return
 	}
 
-	request, decodeErr := s.decoder.DecodeRequest(requestBytes)
-	if decodeErr != nil {
-		s.respondWith(clientConn, *decodeErr)
-		return
-	}
-
-	s.respondWith(clientConn, s.registerBet.Register(request))
+	s.respondWith(clientConn, s.decoder.Process(requestBytes))
 }
 
 func (s *Server) respondWith(clientConn net.Conn, response domain.Response) {

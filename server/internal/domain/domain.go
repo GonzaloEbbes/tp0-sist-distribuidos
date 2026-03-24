@@ -5,10 +5,19 @@ import "time"
 type BetAttempt map[string]string
 
 const MessageTypeBetBatch = "bet_batch"
+const MessageTypeFinish = "finish"
+const MessageTypeWinnersQuery = "winners_query"
 
-type BetRequest struct {
-	Type string
+type BetBatchRequest struct {
 	Bets []BetAttempt
+}
+
+type FinishAgencyRequest struct {
+	Agency string
+}
+
+type WinnersQueryRequest struct {
+	Agency string
 }
 
 type Bet struct {

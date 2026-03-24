@@ -32,7 +32,7 @@ func TestRegisterMustPersistValidBet(t *testing.T) {
 	repository := &repositoryStub{}
 	useCase := NewRegisterBet(repository)
 
-	response := useCase.Register(domain.BetRequest{
+	response := useCase.Register(domain.BetBatchRequest{
 		Bets: []domain.BetAttempt{{
 			"agency":     "1",
 			"nombre":     "John",
@@ -55,7 +55,7 @@ func TestRegisterMustRejectUnknownField(t *testing.T) {
 	repository := &repositoryStub{}
 	useCase := NewRegisterBet(repository)
 
-	response := useCase.Register(domain.BetRequest{
+	response := useCase.Register(domain.BetBatchRequest{
 		Bets: []domain.BetAttempt{{
 			"agency":     "1",
 			"nombre":     "John",
