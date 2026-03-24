@@ -104,9 +104,14 @@ func loadBetsFromCSV(csvPath string, agencyID string) (domain.BetRequest, error)
 }
 
 func newBetRequest(bets []domain.Bet) domain.BetRequest {
+	agency := ""
+	if len(bets) > 0 {
+		agency = bets[0].Agency
+	}
+
 	return domain.BetRequest{
 		Type:   domain.MessageTypeBetBatch,
-		Agency: bets[0].Agency,
+		Agency: agency,
 		Bets:   bets,
 	}
 }
