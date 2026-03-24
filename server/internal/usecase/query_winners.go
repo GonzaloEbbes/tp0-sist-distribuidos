@@ -4,18 +4,23 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/7574-sistemas-distribuidos/docker-compose-init/server/common"
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/server/internal/domain"
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/server/internal/ports"
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/server/common"
 )
 
 const winnersSeparator = ";"
 
 type QueryWinners struct {
 	drawState *DrawState
+	repository ports.BetRepository
 }
 
-func NewQueryWinners(drawState *DrawState) *QueryWinners {
-	return &QueryWinners{drawState: drawState}
+func NewQueryWinners(drawState *DrawState, repository ports.BetRepository) *QueryWinners {
+	return &QueryWinners{
+		drawState: drawState,
+		repository: repository,
+	}
 }
 
 func (uc *QueryWinners) Query(request domain.WinnersQueryRequest) domain.Response {
@@ -27,7 +32,7 @@ func (uc *QueryWinners) Query(request domain.WinnersQueryRequest) domain.Respons
 		return domain.NewErrorResponse("draw_not_ready", "draw is not ready yet")
 	}
 
-	storedBets, err := common.LoadBets()
+	storedBets, err := uc.repository.LoadBets()
 	if err != nil {
 		return domain.NewErrorResponse("storage_error", err.Error())
 	}
@@ -37,7 +42,14 @@ func (uc *QueryWinners) Query(request domain.WinnersQueryRequest) domain.Respons
 		if bet.Agency != agency {
 			continue
 		}
-		if common.HasWon(bet) {
+		if common.HasWon(common.Bet{
+			Agency:    bet.Agency,
+			FirstName: bet.FirstName,
+			LastName:  bet.LastName,
+			Document:  bet.Document,
+			Birthdate: bet.Birthdate,
+			Number:    bet.Number,
+		}) {
 			winners = append(winners, bet.Document)
 		}
 	}

@@ -11,6 +11,13 @@ type repositoryStub struct {
 	err    error
 }
 
+func (r *repositoryStub) LoadBets() ([]domain.Bet, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+	return r.stored, nil
+}
+
 func (r *repositoryStub) StoreBatch(bets []domain.Bet) error {
 	if r.err != nil {
 		return r.err

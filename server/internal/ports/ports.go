@@ -26,4 +26,5 @@ type BetRepository interface {
 	// Deprecated: use StoreBatch instead.
 	Store(domain.Bet) error
 	StoreBatch([]domain.Bet) error
+	LoadBets() ([]domain.Bet, error)
 }

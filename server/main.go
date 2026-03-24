@@ -113,9 +113,10 @@ func main() {
 	)
 
 	drawState := usecase.NewDrawState(config.expectedAgencies)
-	registerBet := usecase.NewRegisterBet(repository.NewBetRepository())
+	betRepository := repository.NewBetRepository()
+	registerBet := usecase.NewRegisterBet(betRepository)
 	finishAgency := usecase.NewFinishAgency(drawState)
-	queryWinners := usecase.NewQueryWinners(drawState)
+	queryWinners := usecase.NewQueryWinners(drawState, betRepository)
 	server, err := common.NewServer(
 		config.port,
 		config.listenBacklog,
