@@ -27,6 +27,9 @@ func (e *BetMessageEncoder) EncodeBet(bet domain.BetRequest, maxBatchAmount int,
 	if maxBatchAmount <= 0 {
 		return nil, fmt.Errorf("invalid max batch amount")
 	}
+	if bet.Type == "" {
+		bet.Type = domain.MessageTypeBetBatch
+	}
 
 	batches := make([][]byte, 0)
 	currentBatch := make([]string, 0, maxBatchAmount)
@@ -38,26 +41,26 @@ func (e *BetMessageEncoder) EncodeBet(bet domain.BetRequest, maxBatchAmount int,
 		}
 
 		candidateBatch := append(currentBatch, encodedBet)
-		candidateMessage := []byte(strings.Join(candidateBatch, ",") + string(messageDelimiter))
+		candidateMessage := encodeBatch(candidateBatch, bet.Type)
 		if len(candidateMessage) > maxBatchSize {
 			if len(currentBatch) == 0 {
 				return nil, fmt.Errorf("bet exceeds maximum batch size")
 			}
 
-			batches = append(batches, []byte(strings.Join(currentBatch, ",")+string(messageDelimiter)))
+			batches = append(batches, encodeBatch(currentBatch, bet.Type))
 			currentBatch = []string{encodedBet}
 			continue
 		}
 
 		currentBatch = candidateBatch
 		if len(currentBatch) == maxBatchAmount {
-			batches = append(batches, []byte(strings.Join(currentBatch, ",")+string(messageDelimiter)))
+			batches = append(batches, encodeBatch(currentBatch, bet.Type))
 			currentBatch = make([]string, 0, maxBatchAmount)
 		}
 	}
 
 	if len(currentBatch) > 0 {
-		batches = append(batches, []byte(strings.Join(currentBatch, ",")+string(messageDelimiter)))
+		batches = append(batches, encodeBatch(currentBatch, bet.Type))
 	}
 
 	return batches, nil
@@ -142,4 +145,8 @@ func encodeSingleBet(singleBet domain.Bet) (string, error) {
 	}
 
 	return strings.Join(parts, "|"), nil
+}
+
+func encodeBatch(batch []string, messageType string) []byte {
+	return []byte(fmt.Sprintf("type=%s|%s%s", messageType, strings.Join(batch, ","), string(messageDelimiter)))
 }

@@ -30,7 +30,18 @@ func (d *BetMessageDecoder) DecodeRequest(message []byte) (domain.BetRequest, *d
 		return domain.BetRequest{}, &errorResponse
 	}
 
-	return domain.BetRequest{Bets: fields}, nil
+	if len(fields) == 0 {
+		errorResponse := domain.NewErrorResponse("malformed_message", "empty message")
+		return domain.BetRequest{}, &errorResponse
+	}
+
+	messageType, ok := fields[0]["type"]
+	if !ok || messageType == "" {
+		errorResponse := domain.NewErrorResponse("malformed_message", "missing type in request")
+		return domain.BetRequest{}, &errorResponse
+	}
+
+	return buildRequestByType(messageType, fields)
 }
 
 func (e *ResponseEncoder) Encode(response domain.Response) ([]byte, error) {
@@ -114,4 +125,19 @@ func containsReservedChar(value string) bool {
 		}
 	}
 	return false
+}
+
+func buildRequestByType(messageType string, fields []domain.BetAttempt) (domain.BetRequest, *domain.Response) {
+	// This would probably fit better in another layer. A use case whose only job is
+	// switching by message type does not sound especially appropriate, and adding a
+	// dedicated handler layer right now would be mostly boilerplate for too little
+	// behavior. If the amount of message types grows, this should likely move.
+	switch messageType {
+	case domain.MessageTypeBetBatch:
+		delete(fields[0], "type")
+		return domain.BetRequest{Type: messageType, Bets: fields}, nil
+	default:
+		errorResponse := domain.NewErrorResponse("malformed_message", fmt.Sprintf("unsupported message type %s", messageType))
+		return domain.BetRequest{}, &errorResponse
+	}
 }

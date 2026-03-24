@@ -1,6 +1,9 @@
 package domain
 
+const MessageTypeBetBatch = "bet_batch"
+
 type BetRequest struct {
+	Type string
 	Bets []Bet
 }
 

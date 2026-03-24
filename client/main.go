@@ -100,7 +100,14 @@ func loadBetsFromCSV(csvPath string, agencyID string) (domain.BetRequest, error)
 		})
 	}
 
-	return domain.BetRequest{Bets: bets}, nil
+	return newBetRequest(bets), nil
+}
+
+func newBetRequest(bets []domain.Bet) domain.BetRequest {
+	return domain.BetRequest{
+		Type: domain.MessageTypeBetBatch,
+		Bets: bets,
+	}
 }
 
 func initLogger(logLevel string) error {

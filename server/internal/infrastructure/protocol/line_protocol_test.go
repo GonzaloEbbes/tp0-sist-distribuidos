@@ -9,11 +9,14 @@ import (
 func TestDecodeRequestMustParseValidMessage(t *testing.T) {
 	decoder := NewBetMessageDecoder()
 
-	request, protocolErr := decoder.DecodeRequest([]byte("agency=1|nombre=John|apellido=Doe|documento=1|nacimiento=2000-01-01|numero=7574\n"))
+	request, protocolErr := decoder.DecodeRequest([]byte("type=bet_batch|agency=1|nombre=John|apellido=Doe|documento=1|nacimiento=2000-01-01|numero=7574\n"))
 	if protocolErr != nil {
 		t.Fatalf("unexpected protocol error: %+v", *protocolErr)
 	}
 
+	if request.Type != domain.MessageTypeBetBatch {
+		t.Fatalf("expected type %s, got %s", domain.MessageTypeBetBatch, request.Type)
+	}
 	if len(request.Bets) != 1 {
 		t.Fatalf("expected 1 bet, got %d", len(request.Bets))
 	}
@@ -28,9 +31,21 @@ func TestDecodeRequestMustParseValidMessage(t *testing.T) {
 func TestDecodeRequestMustRejectDuplicateFields(t *testing.T) {
 	decoder := NewBetMessageDecoder()
 
-	_, protocolErr := decoder.DecodeRequest([]byte("agency=1|agency=2\n"))
+	_, protocolErr := decoder.DecodeRequest([]byte("type=bet_batch|agency=1|agency=2\n"))
 	if protocolErr == nil {
 		t.Fatal("expected duplicate field error")
+	}
+	if protocolErr.Code != "malformed_message" {
+		t.Fatalf("expected malformed_message, got %s", protocolErr.Code)
+	}
+}
+
+func TestDecodeRequestMustRejectMissingType(t *testing.T) {
+	decoder := NewBetMessageDecoder()
+
+	_, protocolErr := decoder.DecodeRequest([]byte("agency=1|nombre=John|apellido=Doe|documento=1|nacimiento=2000-01-01|numero=7574\n"))
+	if protocolErr == nil {
+		t.Fatal("expected missing type error")
 	}
 	if protocolErr.Code != "malformed_message" {
 		t.Fatalf("expected malformed_message, got %s", protocolErr.Code)

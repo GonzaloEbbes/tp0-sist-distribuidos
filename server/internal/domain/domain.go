@@ -4,7 +4,10 @@ import "time"
 
 type BetAttempt map[string]string
 
+const MessageTypeBetBatch = "bet_batch"
+
 type BetRequest struct {
+	Type string
 	Bets []BetAttempt
 }
 
