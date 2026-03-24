@@ -8,6 +8,8 @@ import (
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/server/internal/domain"
 )
 
+const winnersSeparator = ";"
+
 type QueryWinners struct {
 	drawState *DrawState
 }
@@ -42,6 +44,6 @@ func (uc *QueryWinners) Query(request domain.WinnersQueryRequest) domain.Respons
 
 	return domain.Response{
 		Status:  "ok",
-		Message: strings.Join(winners, ","),
+		Message: strings.Join(winners, winnersSeparator),
 	}
 }

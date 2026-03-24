@@ -235,7 +235,7 @@ func countWinners(message string) int {
 	if message == "" {
 		return 0
 	}
-	return len(strings.Split(message, ","))
+	return len(strings.Split(message, ";"))
 }
 
 func setTerminateHandler(client *client.Client) {
