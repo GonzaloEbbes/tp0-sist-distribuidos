@@ -19,10 +19,11 @@ var log = logging.MustGetLogger("log")
 
 type Server struct {
 	shutdownRequested bool
-	clientConn        net.Conn
+	clientConns       map[net.Conn]struct{}
 	serverListener    net.Listener
 	decoder           ports.BetMessageDecoder
 	encoder           ports.ResponseEncoder
+	wg                sync.WaitGroup
 	mu                sync.Mutex
 }
 
@@ -34,6 +35,7 @@ func NewServer(port int, listenBacklog int, decoder ports.BetMessageDecoder, enc
 
 	return &Server{
 		serverListener: listener,
+		clientConns:    make(map[net.Conn]struct{}),
 		decoder:        decoder,
 		encoder:        encoder,
 	}, nil
@@ -42,19 +44,24 @@ func NewServer(port int, listenBacklog int, decoder ports.BetMessageDecoder, enc
 func (s *Server) Stop() {
 	s.mu.Lock()
 	s.shutdownRequested = true
-	clientConn := s.clientConn
-	s.clientConn = nil
+	clientConns := make([]net.Conn, 0, len(s.clientConns))
+	for conn := range s.clientConns {
+		clientConns = append(clientConns, conn)
+	}
+	s.clientConns = make(map[net.Conn]struct{})
 	listener := s.serverListener
 	s.serverListener = nil
 	s.mu.Unlock()
 
-	if clientConn != nil {
+	for _, clientConn := range clientConns {
 		_ = clientConn.Close()
 	}
 
 	if listener != nil {
 		_ = listener.Close()
 	}
+
+	s.wg.Wait()
 }
 
 func (s *Server) Run() {
@@ -63,7 +70,8 @@ func (s *Server) Run() {
 		if clientConn == nil {
 			continue
 		}
-		s.handleClientConnection(clientConn)
+		s.wg.Add(1)
+		go s.handleClientConnection(clientConn)
 	}
 }
 
@@ -74,19 +82,18 @@ func (s *Server) isShutdownRequested() bool {
 }
 
 func (s *Server) handleClientConnection(clientConn net.Conn) {
+	defer s.wg.Done()
+
 	s.mu.Lock()
-	s.clientConn = clientConn
+	s.clientConns[clientConn] = struct{}{}
 	s.mu.Unlock()
 
 	defer func() {
 		s.mu.Lock()
-		currentConn := s.clientConn
-		s.clientConn = nil
+		delete(s.clientConns, clientConn)
 		s.mu.Unlock()
 
-		if currentConn != nil {
-			_ = currentConn.Close()
-		}
+		_ = clientConn.Close()
 	}()
 
 	requestBytes, err := readUntilDelimiter(clientConn, '\n', maxMessageSize)

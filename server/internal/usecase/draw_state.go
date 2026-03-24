@@ -1,6 +1,10 @@
 package usecase
 
-import "github.com/op/go-logging"
+import (
+	"sync"
+
+	"github.com/op/go-logging"
+)
 
 var drawStateLog = logging.MustGetLogger("log")
 
@@ -8,6 +12,7 @@ type DrawState struct {
 	expectedAgencies  int
 	finishedAgencies  map[int]struct{}
 	drawAlreadyLogged bool
+	mu                sync.Mutex
 }
 
 func NewDrawState(expectedAgencies int) *DrawState {
@@ -18,6 +23,9 @@ func NewDrawState(expectedAgencies int) *DrawState {
 }
 
 func (s *DrawState) FinishAgency(agency int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.finishedAgencies[agency] = struct{}{}
 	if !s.drawAlreadyLogged && len(s.finishedAgencies) >= s.expectedAgencies {
 		s.drawAlreadyLogged = true
@@ -26,5 +34,8 @@ func (s *DrawState) FinishAgency(agency int) {
 }
 
 func (s *DrawState) IsReady() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	return len(s.finishedAgencies) >= s.expectedAgencies
 }
