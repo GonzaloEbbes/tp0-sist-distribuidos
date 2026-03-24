@@ -63,6 +63,7 @@ func (c *Client) SendBet(bet domain.BetRequest) (domain.ServerResponse, error) {
 		c.conn = conn
 		c.mu.Unlock()
 
+		log.Infof("action: send_message | result: in_progress | client_id: %s | type: %s", c.clientID, bet.Type)
 		if err := writeAll(conn, message); err != nil {
 			_ = c.Close()
 			return domain.ServerResponse{}, err
@@ -79,6 +80,14 @@ func (c *Client) SendBet(bet domain.BetRequest) (domain.ServerResponse, error) {
 		if err != nil {
 			return domain.ServerResponse{}, err
 		}
+		log.Infof(
+			"action: receive_message | result: success | client_id: %s | type: %s | status: %s | code: %s | message: %s",
+			c.clientID,
+			bet.Type,
+			lastResponse.Status,
+			lastResponse.Code,
+			lastResponse.Message,
+		)
 		if !lastResponse.IsSuccess() {
 			return lastResponse, nil
 		}
@@ -100,6 +109,12 @@ func (c *Client) QueryWinnersUntilReady(request domain.BetRequest) (domain.Serve
 		if !response.IsDrawNotReady() {
 			return response, nil
 		}
+		log.Infof(
+			"action: consulta_ganadores | result: in_progress | client_id: %s | agency: %s | retry_in: %s",
+			c.clientID,
+			request.Agency,
+			drawRetryDelay,
+		)
 		time.Sleep(drawRetryDelay)
 	}
 }

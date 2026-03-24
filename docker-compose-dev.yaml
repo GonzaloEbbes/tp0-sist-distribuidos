@@ -13,7 +13,35 @@ services:
             - testing_net
         volumes:
             - ./client/config.yaml:/config.yaml
-            - ./.data/dataset/agency-1.csv:/data/agency-1.csv
+            - ./.data/agency-1.csv:/data/agency-1.csv
+    client2:
+        container_name: client2
+        image: client:latest
+        entrypoint: /client
+        environment:
+            - CLI_ID=2
+            - CLI_DATASET_FILEPATH=/data/agency-2.csv
+        depends_on:
+            - server
+        networks:
+            - testing_net
+        volumes:
+            - ./client/config.yaml:/config.yaml
+            - ./.data/agency-2.csv:/data/agency-2.csv
+    client3:
+        container_name: client3
+        image: client:latest
+        entrypoint: /client
+        environment:
+            - CLI_ID=3
+            - CLI_DATASET_FILEPATH=/data/agency-3.csv
+        depends_on:
+            - server
+        networks:
+            - testing_net
+        volumes:
+            - ./client/config.yaml:/config.yaml
+            - ./.data/agency-3.csv:/data/agency-3.csv
     server:
         container_name: server
         image: server:latest

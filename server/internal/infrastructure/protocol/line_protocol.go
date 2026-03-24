@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/op/go-logging"
+
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/server/internal/domain"
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/server/internal/ports"
 )
@@ -11,6 +13,7 @@ import (
 const messageDelimiter = '\n'
 
 var reservedValueChars = []string{"|", "=", ",", "\n"}
+var protocolLog = logging.MustGetLogger("log")
 
 type BetMessageDecoder struct{}
 type MessageProcessor struct {
@@ -40,9 +43,11 @@ func NewResponseEncoder() *ResponseEncoder {
 func (p *MessageProcessor) Process(message []byte) domain.Response {
 	messageType, fields, protocolErr := decodeMessage(message)
 	if protocolErr != nil {
+		protocolLog.Infof("action: process_message | result: fail | error_code: %s | error_message: %s", protocolErr.Code, protocolErr.Message)
 		return *protocolErr
 	}
 
+	protocolLog.Infof("action: process_message | result: success | type: %s", messageType)
 	return p.buildRequestByType(messageType, fields)
 }
 
@@ -157,6 +162,7 @@ func (p *MessageProcessor) buildRequestByType(messageType string, fields []domai
 	// behavior. If the amount of message types grows, this should likely move.
 	switch messageType {
 	case domain.MessageTypeBetBatch:
+		protocolLog.Infof("action: route_message | result: success | type: %s", messageType)
 		delete(fields[0], "type")
 		return p.betRegistrar.Register(domain.BetBatchRequest{Bets: fields})
 	case domain.MessageTypeFinish:
@@ -164,12 +170,14 @@ func (p *MessageProcessor) buildRequestByType(messageType string, fields []domai
 		if !ok || agency == "" {
 			return domain.NewErrorResponse("malformed_message", "missing agency in request")
 		}
+		protocolLog.Infof("action: route_message | result: success | type: %s | agency: %s", messageType, agency)
 		return p.agencyFinisher.Finish(domain.FinishAgencyRequest{Agency: agency})
 	case domain.MessageTypeWinnersQuery:
 		agency, ok := fields[0]["agency"]
 		if !ok || agency == "" {
 			return domain.NewErrorResponse("malformed_message", "missing agency in request")
 		}
+		protocolLog.Infof("action: route_message | result: success | type: %s | agency: %s", messageType, agency)
 		return p.winnersQuerier.Query(domain.WinnersQueryRequest{Agency: agency})
 	default:
 		return domain.NewErrorResponse("malformed_message", fmt.Sprintf("unsupported message type %s", messageType))
