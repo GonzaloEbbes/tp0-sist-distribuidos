@@ -50,12 +50,10 @@ func (s *Server) Stop() {
 
 	if clientConn != nil {
 		_ = clientConn.Close()
-		log.Info("action: close_client_socket | result: success")
 	}
 
 	if listener != nil {
 		_ = listener.Close()
-		log.Info("action: close_server_socket | result: success")
 	}
 }
 
@@ -88,14 +86,12 @@ func (s *Server) handleClientConnection(clientConn net.Conn) {
 
 		if currentConn != nil {
 			_ = currentConn.Close()
-			log.Info("action: close_client_socket | result: success")
 		}
 	}()
 
 	requestBytes, err := readUntilDelimiter(clientConn, '\n', maxMessageSize)
 	if err != nil {
 		if !s.isShutdownRequested() {
-			log.Errorf("action: receive_message | result: fail | error: %v", err)
 			errorCode := "malformed_message"
 			if err.Error() == "message exceeds maximum size" {
 				errorCode = "message_too_large"
@@ -111,20 +107,13 @@ func (s *Server) handleClientConnection(clientConn net.Conn) {
 func (s *Server) respondWith(clientConn net.Conn, response domain.Response) {
 	responseBytes, err := s.encoder.Encode(response)
 	if err != nil {
-		if !s.isShutdownRequested() {
-			log.Errorf("action: send_message | result: fail | error: %v", err)
-		}
 		return
 	}
 
-	if err := writeAll(clientConn, responseBytes); err != nil && !s.isShutdownRequested() {
-		log.Errorf("action: send_message | result: fail | error: %v", err)
-	}
+	_ = writeAll(clientConn, responseBytes)
 }
 
 func (s *Server) acceptNewConnection() net.Conn {
-	log.Info("action: accept_connections | result: in_progress")
-
 	s.mu.Lock()
 	listener := s.serverListener
 	s.mu.Unlock()
@@ -137,12 +126,9 @@ func (s *Server) acceptNewConnection() net.Conn {
 		if s.isShutdownRequested() {
 			return nil
 		}
-		log.Errorf("action: accept_connections | result: fail | error: %v", err)
 		return nil
 	}
 
-	addr := clientConn.RemoteAddr().(*net.TCPAddr)
-	log.Infof("action: accept_connections | result: success | ip: %s", addr.IP.String())
 	return clientConn
 }
 

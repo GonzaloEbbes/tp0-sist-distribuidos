@@ -118,7 +118,6 @@ func (c *Client) Close() error {
 		return err
 	}
 
-	log.Infof("action: close_socket | result: success | client_id: %v", c.clientID)
 	return nil
 }
 

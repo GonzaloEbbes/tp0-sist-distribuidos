@@ -206,7 +206,6 @@ func main() {
 		log.Errorf("action: fin_agencia | result: fail | agency: %s | error_code: %s | error_message: %s", config.ID, finishResponse.Code, finishResponse.Message)
 		return
 	}
-	log.Infof("action: fin_agencia | result: success | agency: %s", config.ID)
 
 	winnersResponse, err := betClient.QueryWinnersUntilReady(domain.BetRequest{
 		Type:   domain.MessageTypeWinnersQuery,
