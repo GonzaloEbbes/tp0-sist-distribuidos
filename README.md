@@ -179,3 +179,102 @@ Se proveen [pruebas automáticas](https://github.com/7574-sistemas-distribuidos/
 
 El incumplimiento de las pruebas es condición de desaprobación, pero su cumplimiento no es suficiente para la aprobación.  Se pide a los alumnos leer atentamente y **tener en cuenta** los criterios de corrección informados  [en el campus](https://campusgrado.fi.uba.ar/mod/page/view.php?id=73393).
 Respetar el formato y contenido las entradas de logs descritas en los ejercicios, pues son las que se chequean en cada uno de los tests.
+
+## Documentación de la Solución
+
+### Guía de Ejecución
+
+Cada ejercicio se desarrolla en su rama correspondiente `ej1`, `ej2`, ..., `ej8`.
+
+Flujo general de ejecución:
+
+1. Cambiar a la rama del ejercicio a probar.
+2. Generar el compose con `./generar-compose.sh docker-compose-dev.yaml <cantidad_clientes>`.
+3. Levantar el entorno con `make docker-compose-up`.
+4. Ver logs con `make docker-compose-logs`.
+5. Detener el entorno con `make docker-compose-down`.
+
+Comandos útiles:
+
+- `make build`: compila cliente y servidor en el host.
+- `make docker-image`: construye las imágenes sin levantar el compose.
+- `make docker-compose-up`: levanta el entorno usando `docker-compose-dev.yaml`.
+- `make docker-compose-logs`: muestra logs del entorno.
+- `make docker-compose-down`: detiene y elimina recursos del compose.
+
+Aclaraciones por tramo:
+
+- `ej1`: el cambio principal es `generar-compose.sh`, que genera el compose con la cantidad de clientes pedida.
+- `ej2`: `server/config.ini` y `client/config.yaml` se montan como volúmenes, por lo que no hace falta reconstruir imágenes para aplicar cambios de configuración.
+- `ej6` en adelante: `generar-compose.sh` descomprime el dataset si hace falta y monta `./.data/agency-N.csv` en `/data/agency-N.csv` para cada cliente.
+- `ej7` en adelante: después de enviar apuestas, cada cliente notifica fin y luego consulta ganadores.
+- `ej8`: se mantiene el flujo de `ej7`, pero el servidor atiende conexiones en paralelo.
+
+### Protocolo de Comunicación
+
+La comunicación entre cliente y servidor usa mensajes de texto terminados en `\n`.
+
+Formato general:
+
+- cada campo se serializa como `key=value`
+- los campos de un mensaje se separan con `|`
+- en los mensajes batch, cada apuesta individual se separa con `,`
+
+Tipos de mensaje:
+
+- `type=bet_batch`
+  Registra una o más apuestas. Cada apuesta incluye `agency`, `nombre`, `apellido`, `documento`, `nacimiento` y `numero`.
+- `type=finish`
+  Notifica que una agencia terminó de enviar todas sus apuestas. Incluye `agency`.
+- `type=winners_query`
+  Solicita los ganadores correspondientes a una agencia. Incluye `agency`.
+
+Ejemplos:
+
+```text
+type=bet_batch|agency=1|nombre=Juan|apellido=Perez|documento=123|nacimiento=2000-01-01|numero=7574,agency=1|nombre=Ana|apellido=Lopez|documento=456|nacimiento=1999-05-10|numero=1111
+```
+
+```text
+type=finish|agency=1
+```
+
+```text
+type=winners_query|agency=1
+```
+
+Formato de respuesta:
+
+- éxito: `status=ok`
+- error: `status=error|code=<codigo>|message=<descripcion>`
+
+En la consulta de ganadores, la respuesta exitosa devuelve los DNIs ganadores en `message`, separados por `;`. El cliente usa esa lista para calcular `cant_ganadores`.
+
+Restricciones:
+
+- el tamaño máximo de cada mensaje admitido por el servidor es `8 KB`, validado durante la lectura del socket mediante una constante de código
+- el cliente también valida el tamaño real serializado antes de enviar cada batch, además de respetar `batch.maxAmount`
+- los valores no pueden contener `|`, `=`, `,` ni saltos de línea
+- el cliente abre una conexión por mensaje
+
+### Sincronización y Concurrencia
+
+Los mecanismos de sincronización relevantes aparecen en la parte concurrente del servidor.
+
+Persistencia:
+
+- el repositorio encapsula `StoreBets()` y `LoadBets()`
+- el acceso al archivo de apuestas se protege con `sync.RWMutex`
+- la sección crítica cubre solo el acceso real al archivo; la conversión entre `common.Bet` y `domain.Bet` se realiza fuera del lock para reducir contención
+
+Estado del sorteo:
+
+- `DrawState` mantiene la cantidad de agencias finalizadas y el estado del sorteo
+- ese estado se protege con `sync.Mutex` porque es compartido entre requests concurrentes
+
+Servidor concurrente:
+
+- el servidor acepta conexiones y lanza una goroutine por conexión
+- mantiene un conjunto de conexiones activas protegido por mutex
+- `Stop()` cierra listener y conexiones activas
+- un `sync.WaitGroup` espera a que terminen los handlers en ejecución antes de finalizar, de modo que el cierre siga siendo graceful
