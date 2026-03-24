@@ -169,7 +169,6 @@ func main() {
 	)
 	setTerminateHandler(betClient)
 
-	log.Infof("action: apuesta_enviada | result: in_progress | cantidad: %d", len(config.Bet.Bets))
 	response, err := betClient.SendBet(config.Bet)
 	if err != nil {
 		log.Errorf(
@@ -195,7 +194,6 @@ func main() {
 		len(config.Bet.Bets),
 	)
 
-	log.Infof("action: fin_agencia | result: in_progress | agency: %s", config.ID)
 	finishResponse, err := betClient.SendRequest(domain.BetRequest{
 		Type:   domain.MessageTypeFinish,
 		Agency: config.ID,
@@ -210,7 +208,6 @@ func main() {
 	}
 	log.Infof("action: fin_agencia | result: success | agency: %s", config.ID)
 
-	log.Infof("action: consulta_ganadores | result: in_progress | agency: %s", config.ID)
 	winnersResponse, err := betClient.QueryWinnersUntilReady(domain.BetRequest{
 		Type:   domain.MessageTypeWinnersQuery,
 		Agency: config.ID,

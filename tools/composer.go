@@ -93,7 +93,9 @@ func addServices(appConfig *AppConfig, clientCount int) {
 		ContainerName: "server",
 		Image:         "server:latest",
 		Entrypoint:    "/server",
-		Environment:   []string{},
+		Environment: []string{
+			"SERVER_EXPECTED_AGENCIES=" + strconv.Itoa(clientCount),
+		},
 		Networks:      []string{"testing_net"},
 		Volumes:       []string{"./server/config.ini:/config.ini"},
 		DependsOn:     nil,
